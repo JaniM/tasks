@@ -1,0 +1,17 @@
+{
+  "name": "tasks",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.js",
+  "scripts": {
+    "build": "elm make src/Main.elm --output=www/elm.js",
+    "start": "npm run-script build && electron ."
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^23.1.2"
+  },
+  "dependencies": {
+  }
+}

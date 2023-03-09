@@ -1,0 +1,32 @@
+module Tasks.Style exposing (..)
+
+import Element exposing (Color, rgb255)
+import Tasks.Utils exposing (..)
+
+type alias Style =
+    { background : Color
+    , taskBackground : Color
+    , buttonBackground : Color
+    , textColor : Color
+    , textSize : Int -> Int
+    }
+
+
+lightStyle : Style
+lightStyle =
+    { background = rgb255 225 225 225
+    , taskBackground = rgb255 200 200 200
+    , buttonBackground = rgb255 180 180 180
+    , textColor = rgb255 0 0 0
+    , textSize = intModular 16 1.2
+    }
+
+
+darkStyle : Style
+darkStyle =
+    { background = rgb255 50 50 50
+    , taskBackground = rgb255 75 75 75
+    , buttonBackground = rgb255 100 100 100
+    , textColor = rgb255 255 255 255
+    , textSize = intModular 16 1.2
+    }
