@@ -20,7 +20,6 @@ import List.Extra as List
 import Maybe.Extra as Maybe
 import Prng.Uuid
 import Random.Pcg.Extended as Pcg
-import String exposing (right)
 import Task
 import Tasks.Input exposing (..)
 import Tasks.Interop as Interop
@@ -94,11 +93,27 @@ addTaskToModel text project model =
     }
 
 
+editTaskInModel id text model =
+    { model
+        | tasks = updateTask (\task -> { task | text = text }) model id
+        , viewState = None
+        , text = ""
+    }
+
+
 handleMainInput : Model -> Result String Model
 handleMainInput model =
     case parseInput model.text of
         Ok (Tasks.Input.Text text) ->
-            Ok (addTaskToModel text model.project model)
+            case model.viewState of
+                None ->
+                    Ok (addTaskToModel text model.project model)
+
+                Selected _ ->
+                    Ok (addTaskToModel text model.project model)
+
+                Edit id ->
+                    Ok (editTaskInModel id text model)
 
         Ok (Tasks.Input.Project project) ->
             let
@@ -232,8 +247,21 @@ loadModel m model =
     }
 
 
-selectTask id model =
-    { model | selectedTask = id }
+setViewState state model =
+    case state of
+        None ->
+            Ok { model | viewState = state }
+
+        Selected _ ->
+            Ok { model | viewState = state }
+
+        Edit taskId ->
+            case findTask model taskId of
+                Nothing ->
+                    Err "Can't find task"
+
+                Just task ->
+                    Ok { model | viewState = state, text = task.text }
 
 
 type alias Update =
@@ -267,8 +295,8 @@ handleMsg msg =
         LoadModel m ->
             noCmd <| loadModel m
 
-        SelectTask id ->
-            noCmd <| selectTask id
+        SetViewState state ->
+            tryLog <| setViewState state
 
         FocusInput ->
             onlyCmd (always (Task.attempt (\_ -> NoOp) (Browser.Dom.focus "input")))
@@ -325,7 +353,7 @@ view model =
         [ Background.color model.style.background
         , Font.color model.style.textColor
         , Font.size (model.style.textSize 1)
-        , onClick (SelectTask Nothing)
+        , onClick (choose (SetViewState None) NoOp (viewStateIsSelected model))
         ]
         (topView model)
 
@@ -355,18 +383,42 @@ toggleStyleButton =
 contentRow : Model -> Element Msg
 contentRow model =
     let
-        right =
+        listing =
             case projectSearch model of
                 Just text ->
                     viewProjectSearch model text
 
                 Nothing ->
-                    Element.Lazy.lazy4 viewTasks model.style model.project model.selectedTask model.tasks
+                    Element.Lazy.lazy4 viewTasks model.style model.project model.viewState model.tasks
+
+        edit id =
+            case findTask model id of
+                Just task ->
+                    viewTaskEdit model task
+
+                Nothing ->
+                    text "This can't happen :clueless:"
+
+        pane =
+            case model.viewState of
+                None ->
+                    listing
+
+                Selected _ ->
+                    listing
+
+                Edit id ->
+                    edit id
     in
     row [ width fill, height fill, clip ]
         [ projectList model
-        , right
+        , pane
         ]
+
+
+viewTaskEdit : Model -> Task -> Element Msg
+viewTaskEdit _ _ =
+    el [ width fill, height fill ] (text "Editing task")
 
 
 projectList : Model -> Element Msg
@@ -475,12 +527,12 @@ viewEmptyProject style project =
             ]
 
 
-viewTasks : Style -> Maybe String -> Maybe Prng.Uuid.Uuid -> List Task -> Element Msg
-viewTasks style project selectedTask tasks =
+viewTasks : Style -> Maybe String -> ViewState -> List Task -> Element Msg
+viewTasks style project viewState tasks =
     let
         task_ task =
             ( Prng.Uuid.toString task.id
-            , viewTask style (selectedTask == Just task.id) task
+            , viewTask style (viewState == Selected task.id) task
             )
     in
     case ( filterTasksByProject project tasks, project ) of
@@ -501,24 +553,39 @@ viewTasks style project selectedTask tasks =
 viewTask : Style -> Bool -> Task -> Element Msg
 viewTask style selected task =
     let
-        remove =
+        button =
             Input.button
                 [ padding (paddingScale 1)
                 , Background.color style.buttonBackground
                 , Font.size (style.textSize -1)
                 ]
+
+        remove =
+            button
                 { onPress = Just (RemoveTask task.id)
                 , label = text "Remove"
                 }
 
+        edit =
+            Input.button
+                [ padding (paddingScale 1)
+                , Background.color style.buttonBackground
+                , Font.size (style.textSize -1)
+                , onClickNoPropagate (SetViewState (Edit task.id))
+                ]
+                { onPress = Nothing
+                , label = text "Edit"
+                }
+
         dropdown =
             if selected then
-                el
+                row
                     [ Background.color style.taskBackground
                     , Element.Border.width 1
                     , padding (paddingScale 2)
+                    , spacing (paddingScale 2)
                     ]
-                    remove
+                    [ edit, remove ]
 
             else
                 Element.none
@@ -530,7 +597,7 @@ viewTask style selected task =
             (choose style.buttonBackground style.taskBackground selected)
         , spacing (paddingScale 1)
         , below dropdown
-        , onClickNoPropagate (SelectTask (Just task.id))
+        , onClickNoPropagate (SetViewState (Selected task.id))
         ]
         [ paragraph [ width fill ] [ text task.text ]
         , text (Maybe.withDefault "No project" task.project)

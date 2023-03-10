@@ -1,10 +1,14 @@
 module Tasks.Model exposing (..)
 
+import List.Extra as List
 import Prng.Uuid exposing (Uuid)
 import Random.Pcg.Extended as Pcg
 import Tasks.Style exposing (Style)
 
-type alias TaskId = Uuid
+
+type alias TaskId =
+    Uuid
+
 
 type alias Task =
     { text : String
@@ -20,8 +24,14 @@ type alias Model =
     , project : Maybe String
     , seed : Pcg.Seed
     , style : Style
-    , selectedTask : Maybe TaskId
+    , viewState : ViewState
     }
+
+
+type ViewState
+    = None
+    | Selected TaskId
+    | Edit TaskId
 
 
 type Msg
@@ -33,9 +43,10 @@ type Msg
     | DeleteProject String
     | Tabfill
     | LoadModel Model
-    | SelectTask (Maybe TaskId)
+    | SetViewState ViewState
     | FocusInput
     | NoOp
+
 
 emptyModel : Model
 emptyModel =
@@ -45,7 +56,7 @@ emptyModel =
     , seed = Pcg.initialSeed 0 []
     , style = Tasks.Style.darkStyle
     , project = Nothing
-    , selectedTask = Nothing
+    , viewState = None
     }
 
 
@@ -71,3 +82,19 @@ filterTasksByProject project tasks =
 countTasks : List Task -> String -> Int
 countTasks tasks p =
     tasks |> filterTasksByProject (Just p) |> List.length
+
+
+viewStateIsSelected model =
+    case model.viewState of
+        Selected _ ->
+            True
+
+        _ ->
+            False
+
+
+findTask model id =
+    List.find (\x -> x.id == id) model.tasks
+    
+updateTask f model id =
+    List.updateIf (\x -> x.id == id) f model.tasks
