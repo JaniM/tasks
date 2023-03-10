@@ -1,6 +1,8 @@
 module Main exposing (main)
 
 import Browser
+import Browser.Dom
+import Browser.Events
 import Element exposing (..)
 import Element.Background as Background
 import Element.Border
@@ -10,6 +12,7 @@ import Element.Input as Input
 import Element.Keyed
 import Element.Lazy
 import Html exposing (Html)
+import Html.Attributes
 import Html.Events as HtmlEvents
 import Json.Decode as D
 import Json.Decode.Extra as D
@@ -18,6 +21,7 @@ import Maybe.Extra as Maybe
 import Prng.Uuid
 import Random.Pcg.Extended as Pcg
 import String exposing (right)
+import Task
 import Tasks.Input exposing (..)
 import Tasks.Interop as Interop
 import Tasks.Model exposing (..)
@@ -49,15 +53,22 @@ init ( seed, seedExtension ) =
 
 
 subscriptions : Model -> Sub Msg
-subscriptions model =
-    Interop.subscribe <|
-        \fromJs ->
-            case fromJs of
-                Interop.Error _ ->
-                    LoadModel model
+subscriptions _ =
+    let
+        interop =
+            Interop.subscribe <|
+                \fromJs ->
+                    case fromJs of
+                        Interop.Error _ ->
+                            NoOp
 
-                Interop.LoadModel m ->
-                    LoadModel m
+                        Interop.LoadModel m ->
+                            LoadModel m
+
+        keypress =
+            Browser.Events.onKeyPress (D.succeed FocusInput)
+    in
+    Sub.batch [ interop, keypress ]
 
 
 projectSearch : Model -> Maybe String
@@ -178,6 +189,10 @@ noCmd f x =
     ( f x, Cmd.none )
 
 
+onlyCmd f x =
+    ( x, f x )
+
+
 setText s model =
     { model | text = s }
 
@@ -217,6 +232,10 @@ loadModel m model =
     }
 
 
+selectTask id model =
+    { model | selectedTask = id }
+
+
 type alias Update =
     Msg -> Model -> ( Model, Cmd Msg )
 
@@ -247,6 +266,15 @@ handleMsg msg =
 
         LoadModel m ->
             noCmd <| loadModel m
+
+        SelectTask id ->
+            noCmd <| selectTask id
+
+        FocusInput ->
+            onlyCmd (always (Task.attempt (\_ -> NoOp) (Browser.Dom.focus "input")))
+
+        NoOp ->
+            noCmd identity
 
 
 saveChangedTasks : Update -> Update
@@ -286,29 +314,20 @@ paddingScale n =
     5 * n
 
 
+leftBarWidth : Length
+leftBarWidth =
+    px 150
+
+
 view : Model -> Html Msg
 view model =
     layout
         [ Background.color model.style.background
         , Font.color model.style.textColor
         , Font.size (model.style.textSize 1)
+        , onClick (SelectTask Nothing)
         ]
         (topView model)
-
-
-filterTasksByProject : Maybe String -> List Task -> List Task
-filterTasksByProject project tasks =
-    case project of
-        Just p ->
-            tasks |> List.filter (\x -> x.project == Just p)
-
-        Nothing ->
-            tasks
-
-
-leftBarWidth : Length
-leftBarWidth =
-    px 150
 
 
 topView : Model -> Element Msg
@@ -339,22 +358,19 @@ contentRow model =
         right =
             case projectSearch model of
                 Just text ->
-                    viewProjectSearch model.style text model.projects
+                    viewProjectSearch model text
 
                 Nothing ->
-                    Element.Lazy.lazy3 viewTasks model.style model.project model.tasks
-
-        countTasks p =
-            model.tasks |> filterTasksByProject (Just p) |> List.length
+                    Element.Lazy.lazy4 viewTasks model.style model.project model.selectedTask model.tasks
     in
     row [ width fill, height fill, clip ]
-        [ projectList countTasks model.style model.project model.projects
+        [ projectList model
         , right
         ]
 
 
-projectList : (String -> Int) -> Style -> Maybe String -> List String -> Element Msg
-projectList countTasks style chosenProject projects =
+projectList : Model -> Element Msg
+projectList ({ style, projects } as model) =
     column
         [ width leftBarWidth
         , height fill
@@ -362,23 +378,23 @@ projectList countTasks style chosenProject projects =
         , spacing (paddingScale 1)
         , Font.size (style.textSize -1)
         ]
-        (List.map (projectCard countTasks style chosenProject) projects)
+        (List.map (projectCard model) projects)
 
 
-projectCard : (String -> Int) -> Style -> Maybe String -> String -> Element Msg
-projectCard countTasks style chosenProject project =
+projectCard : Model -> String -> Element Msg
+projectCard model project =
     row
         [ width fill
         , Background.color
-            (choose style.buttonBackground
-                style.taskBackground
-                (chosenProject == Just project)
+            (choose model.style.buttonBackground
+                model.style.taskBackground
+                (model.project == Just project)
             )
         , padding (paddingScale 1)
         , onClick (SetProject False project)
         ]
         [ paragraph [ width fill ] [ text project ]
-        , text (String.fromInt (countTasks project))
+        , text (String.fromInt (countTasks model.tasks project))
         ]
 
 
@@ -395,6 +411,7 @@ viewTaskInput model =
             [ onKeys [ ( "Enter", SubmitInput ), ( "Tab", Tabfill ) ]
             , Background.color model.style.taskBackground
             , Input.focusedOnLoad
+            , Html.Attributes.id "input" |> htmlAttribute
             ]
             { onChange = SetText
             , text = model.text
@@ -403,8 +420,8 @@ viewTaskInput model =
             }
 
 
-viewProjectSearch : Style -> String -> List String -> Element Msg
-viewProjectSearch style prefix projects =
+viewProjectSearch : Model -> String -> Element Msg
+viewProjectSearch { style, projects } prefix =
     let
         card project =
             el
@@ -458,12 +475,12 @@ viewEmptyProject style project =
             ]
 
 
-viewTasks : Style -> Maybe String -> List Task -> Element Msg
-viewTasks style project tasks =
+viewTasks : Style -> Maybe String -> Maybe Prng.Uuid.Uuid -> List Task -> Element Msg
+viewTasks style project selectedTask tasks =
     let
         task_ task =
             ( Prng.Uuid.toString task.id
-            , viewTask style task
+            , viewTask style (selectedTask == Just task.id) task
             )
     in
     case ( filterTasksByProject project tasks, project ) of
@@ -481,8 +498,8 @@ viewTasks style project tasks =
                 (List.map task_ filteredTasks)
 
 
-viewTask : Style -> Task -> Element Msg
-viewTask style task =
+viewTask : Style -> Bool -> Task -> Element Msg
+viewTask style selected task =
     let
         remove =
             Input.button
@@ -493,16 +510,30 @@ viewTask style task =
                 { onPress = Just (RemoveTask task.id)
                 , label = text "Remove"
                 }
+
+        dropdown =
+            if selected then
+                el
+                    [ Background.color style.taskBackground
+                    , Element.Border.width 1
+                    , padding (paddingScale 2)
+                    ]
+                    remove
+
+            else
+                Element.none
     in
     row
         [ width fill
         , padding (paddingScale 1)
-        , Background.color style.taskBackground
+        , Background.color
+            (choose style.buttonBackground style.taskBackground selected)
         , spacing (paddingScale 1)
+        , below dropdown
+        , onClickNoPropagate (SelectTask (Just task.id))
         ]
-        [ el [ width fill ] (text task.text)
+        [ paragraph [ width fill ] [ text task.text ]
         , text (Maybe.withDefault "No project" task.project)
-        , remove
         ]
 
 
@@ -515,4 +546,10 @@ onKeys pairs =
     List.map decodeKey pairs
         |> D.oneOf
         |> HtmlEvents.preventDefaultOn "keydown"
+        |> htmlAttribute
+
+
+onClickNoPropagate msg =
+    D.succeed ( msg, True )
+        |> HtmlEvents.stopPropagationOn "click"
         |> htmlAttribute
