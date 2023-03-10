@@ -60,11 +60,6 @@ subscriptions model =
                     LoadModel m
 
 
-type alias Filter =
-    { project : Maybe String
-    }
-
-
 projectSearch : Model -> Maybe String
 projectSearch model =
     case parseInput model.text of
@@ -301,9 +296,14 @@ view model =
         (topView model)
 
 
-filterTasks : Filter -> List Task -> List Task
-filterTasks { project } =
-    List.filter (\x -> Maybe.unwrap True (\_ -> x.project == project) project)
+filterTasksByProject : Maybe String -> List Task -> List Task
+filterTasksByProject project tasks =
+    case project of
+        Just p ->
+            tasks |> List.filter (\x -> x.project == Just p)
+
+        Nothing ->
+            tasks
 
 
 leftBarWidth : Length
@@ -343,15 +343,18 @@ contentRow model =
 
                 Nothing ->
                     Element.Lazy.lazy3 viewTasks model.style model.project model.tasks
+
+        countTasks p =
+            model.tasks |> filterTasksByProject (Just p) |> List.length
     in
     row [ width fill, height fill, clip ]
-        [ projectList model.style model.project model.projects
+        [ projectList countTasks model.style model.project model.projects
         , right
         ]
 
 
-projectList : Style -> Maybe String -> List String -> Element Msg
-projectList style chosenProject projects =
+projectList : (String -> Int) -> Style -> Maybe String -> List String -> Element Msg
+projectList countTasks style chosenProject projects =
     column
         [ width leftBarWidth
         , height fill
@@ -359,12 +362,12 @@ projectList style chosenProject projects =
         , spacing (paddingScale 1)
         , Font.size (style.textSize -1)
         ]
-        (List.map (projectCard style chosenProject) projects)
+        (List.map (projectCard countTasks style chosenProject) projects)
 
 
-projectCard : Style -> Maybe String -> String -> Element Msg
-projectCard style chosenProject project =
-    el
+projectCard : (String -> Int) -> Style -> Maybe String -> String -> Element Msg
+projectCard countTasks style chosenProject project =
+    row
         [ width fill
         , Background.color
             (choose style.buttonBackground
@@ -374,7 +377,9 @@ projectCard style chosenProject project =
         , padding (paddingScale 1)
         , onClick (SetProject False project)
         ]
-        (paragraph [] [ text project ])
+        [ paragraph [ width fill ] [ text project ]
+        , text (String.fromInt (countTasks project))
+        ]
 
 
 noFocusStyle : Attribute msg
@@ -456,15 +461,12 @@ viewEmptyProject style project =
 viewTasks : Style -> Maybe String -> List Task -> Element Msg
 viewTasks style project tasks =
     let
-        filter =
-            { project = project }
-
         task_ task =
             ( Prng.Uuid.toString task.id
             , viewTask style task
             )
     in
-    case ( filterTasks filter tasks, project ) of
+    case ( filterTasksByProject project tasks, project ) of
         ( [], Just p ) ->
             viewEmptyProject style p
 
@@ -507,7 +509,7 @@ viewTask style task =
 onKeys : List ( String, msg ) -> Attribute msg
 onKeys pairs =
     let
-        decodeKey (key, m) =
+        decodeKey ( key, m ) =
             D.when (D.field "key" D.string) ((==) key) (D.succeed ( m, True ))
     in
     List.map decodeKey pairs

@@ -17,11 +17,6 @@ fmap f g x =
     f (g x)
 
 
-fmap2 : (a -> b) -> (c -> d -> a) -> c -> d -> b
-fmap2 f g x y =
-    f (g x y)
-
-
 intModular : Float -> Float -> Int -> Int
 intModular start step =
     fmap round (Element.modular start step)
