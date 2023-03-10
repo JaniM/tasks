@@ -138,9 +138,11 @@ findProjectsMatchingSearch search projects =
     let
         lowerSearch =
             String.toLower search
+
+        pred x =
+            String.toLower x |> String.startsWith lowerSearch
     in
-    projects
-        |> List.filter (\x -> String.toLower x |> String.startsWith lowerSearch)
+    List.filter pred projects
 
 
 tabfill : Model -> Result String Model
@@ -155,11 +157,10 @@ tabfill model =
 
         Ok (Tasks.Input.Project text) ->
             let
-                matching =
-                    findProjectsMatchingSearch text model.projects
-
                 prefix =
-                    findCommonPrefix matching |> Maybe.withDefault text
+                    findProjectsMatchingSearch text model.projects
+                        |> findCommonPrefix
+                        |> Maybe.withDefault text
             in
             Ok { model | text = projectPrefix ++ prefix }
 
@@ -301,12 +302,8 @@ view model =
 
 
 filterTasks : Filter -> List Task -> List Task
-filterTasks { project } tasks =
-    let
-        fn x =
-            Maybe.unwrap True (\_ -> x.project == project) project
-    in
-    List.filter fn tasks
+filterTasks { project } =
+    List.filter (\x -> Maybe.unwrap True (\_ -> x.project == project) project)
 
 
 leftBarWidth : Length
@@ -510,10 +507,10 @@ viewTask style task =
 onKeys : List ( String, msg ) -> Attribute msg
 onKeys pairs =
     let
-        decodeKey key m =
+        decodeKey (key, m) =
             D.when (D.field "key" D.string) ((==) key) (D.succeed ( m, True ))
     in
-    List.map (\( a, b ) -> decodeKey a b) pairs
+    List.map decodeKey pairs
         |> D.oneOf
         |> HtmlEvents.preventDefaultOn "keydown"
         |> htmlAttribute

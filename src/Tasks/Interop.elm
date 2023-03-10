@@ -89,7 +89,6 @@ encodeModel model =
     E.object
         [ ( "tasks", E.list task model.tasks )
         , ( "projects", E.list E.string model.projects )
-        , ( "project", E.maybe E.string model.project )
         ]
 
 
