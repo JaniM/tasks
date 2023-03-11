@@ -1,4 +1,19 @@
-module Tasks.Model exposing (..)
+module Tasks.Model exposing
+    ( Model
+    , Msg(..)
+    , Task
+    , TaskId
+    , ViewState(..)
+    , countTasks
+    , emptyModel
+    , filterTasksByProject
+    , findCommonPrefix
+    , findProjectsMatchingSearch
+    , findTask
+    , isLoadModel
+    , updateTask
+    , viewStateIsSelected
+    )
 
 import List.Extra as List
 import Prng.Uuid exposing (Uuid)
@@ -44,7 +59,7 @@ type Msg
     | AddTask String (Maybe String) Time.Posix
     | RemoveTask Uuid
     | UpdateTask TaskId (Task -> Task)
-    -- TODO: Maybe this should be generalized to something like SendCmd?
+      -- TODO: Maybe this should be generalized to something like SendCmd?
     | MarkDone TaskId
     | ToggleStyle
     | SetProject Bool String
@@ -110,3 +125,26 @@ findTask model id =
 updateTask : (Task -> Task) -> Model -> Uuid -> List Task
 updateTask f model id =
     List.updateIf (\x -> x.id == id) f model.tasks
+
+
+findCommonPrefix : List String -> Maybe String
+findCommonPrefix strings =
+    let
+        first =
+            List.head strings |> Maybe.withDefault ""
+    in
+    List.reverseRange (String.length first) 1
+        |> List.map (\n -> String.slice 0 n first)
+        |> List.find (\p -> List.all (String.startsWith p) strings)
+
+
+findProjectsMatchingSearch : String -> List String -> List String
+findProjectsMatchingSearch search projects =
+    let
+        lowerSearch =
+            String.toLower search
+
+        pred x =
+            String.toLower x |> String.startsWith lowerSearch
+    in
+    List.filter pred projects

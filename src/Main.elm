@@ -1,7 +1,6 @@
 module Main exposing (main)
 
 import Browser
-import Browser.Dom
 import Browser.Events
 import Element exposing (..)
 import Element.Background as Background
@@ -18,23 +17,21 @@ import Json.Decode as D
 import Json.Decode.Extra as D
 import List.Extra as List
 import Maybe.Extra as Maybe
-import Prng.Uuid exposing (Uuid)
+import Prng.Uuid
 import Random.Pcg.Extended as Pcg
-import Task
+import Tasks.Behavior
 import Tasks.Input exposing (..)
 import Tasks.Interop as Interop
 import Tasks.Model exposing (..)
 import Tasks.Style exposing (..)
 import Tasks.Utils exposing (..)
-import Time
-import Tuple exposing (first)
 
 
 main : Program ( Int, List Int ) Model Msg
 main =
     Browser.element
         { init = init
-        , update = update
+        , update = Tasks.Behavior.update
         , view = view
         , subscriptions = subscriptions
         }
@@ -79,324 +76,6 @@ projectSearch model =
 
         _ ->
             Nothing
-
-
-addTaskToModel : String -> Maybe String -> Time.Posix -> Model -> Model
-addTaskToModel text project time model =
-    let
-        ( uuid, seed ) =
-            Pcg.step Prng.Uuid.generator model.seed
-    in
-    { model
-        | text = ""
-        , seed = seed
-        , tasks = Task text project uuid time Nothing :: model.tasks
-    }
-
-
-addTask : String -> Maybe String -> Cmd Msg
-addTask text project =
-    Task.perform (AddTask text project) Time.now
-
-
-editTaskInModel : Task -> String -> Model -> Model
-editTaskInModel task text model =
-    { model
-        | tasks = updateTask (\t -> { t | text = text }) model task.id
-        , viewState = None
-        , text = ""
-    }
-
-
-handleMainInput : Model -> ( Model, Cmd Msg )
-handleMainInput model =
-    case parseInput model.text of
-        Ok (Tasks.Input.Text text) ->
-            ( model, addTask text model.project )
-
-        Ok (Tasks.Input.Project project) ->
-            let
-                newModel =
-                    if project == "" then
-                        { model
-                            | project = Nothing
-                            , text = ""
-                        }
-
-                    else if List.any ((==) project) model.projects then
-                        { model
-                            | project = Just project
-                            , text = ""
-                        }
-
-                    else
-                        { model
-                            | projects = project :: model.projects
-                            , project = Just project
-                            , text = ""
-                        }
-            in
-            ( newModel, Cmd.none )
-
-        Err _ ->
-            ( model, Interop.log "Parsing failed" )
-
-
-findCommonPrefix : List String -> Maybe String
-findCommonPrefix strings =
-    let
-        first =
-            List.head strings |> Maybe.withDefault ""
-    in
-    List.reverseRange (String.length first) 1
-        |> List.map (\n -> String.slice 0 n first)
-        |> List.find (\p -> List.all (String.startsWith p) strings)
-
-
-findProjectsMatchingSearch : String -> List String -> List String
-findProjectsMatchingSearch search projects =
-    let
-        lowerSearch =
-            String.toLower search
-
-        pred x =
-            String.toLower x |> String.startsWith lowerSearch
-    in
-    List.filter pred projects
-
-
-tabfill : Model -> Result String Model
-tabfill model =
-    case parseInput model.text of
-        Ok (Tasks.Input.Text text) ->
-            if String.startsWith text projectPrefix then
-                Ok { model | text = projectPrefix }
-
-            else
-                Ok model
-
-        Ok (Tasks.Input.Project text) ->
-            let
-                prefix =
-                    findProjectsMatchingSearch text model.projects
-                        |> findCommonPrefix
-                        |> Maybe.withDefault text
-            in
-            Ok { model | text = projectPrefix ++ prefix }
-
-        Err _ ->
-            Err "Parsing failed"
-
-
-tryLog : (a -> Result String a) -> a -> ( a, Cmd msg )
-tryLog f val =
-    case f val of
-        Ok x ->
-            ( x, Cmd.none )
-
-        Err e ->
-            ( val, Interop.log e )
-
-
-noCmd : (a -> a) -> a -> ( a, Cmd msg )
-noCmd f x =
-    ( f x, Cmd.none )
-
-
-onlyCmd : (model -> Cmd msg) -> model -> ( model, Cmd msg )
-onlyCmd f x =
-    ( x, f x )
-
-
-setText : String -> Model -> Model
-setText s model =
-    { model | text = s }
-
-
-removeTask : Uuid -> Model -> Model
-removeTask id model =
-    { model | tasks = List.filter (\t -> t.id /= id) model.tasks }
-
-
-toggleStyle : Model -> Model
-toggleStyle model =
-    { model | style = choose darkStyle lightStyle (model.style == lightStyle) }
-
-
-setProject : Bool -> String -> Model -> Model
-setProject clearText target model =
-    let
-        newProject =
-            Maybe.unwrap
-                (Just target)
-                (fmap (choose Nothing (Just target)) ((==) target))
-    in
-    { model
-        | project = newProject model.project
-        , text = choose "" model.text clearText
-    }
-
-
-deleteProject : String -> Model -> Model
-deleteProject target model =
-    { model
-        | projects = List.filter ((/=) target) model.projects
-        , project = choose Nothing model.project (model.project == Just target)
-    }
-
-
-loadModel : Model -> Model -> Model
-loadModel m model =
-    { model
-        | tasks = m.tasks
-        , projects = m.projects
-    }
-
-
-setViewState : ViewState -> Model -> Model
-setViewState state model =
-    case state of
-        None ->
-            { model | viewState = state }
-
-        Selected _ ->
-            { model | viewState = state }
-
-        Edit task ->
-            { model | viewState = state, text = task.text }
-
-
-markDone : TaskId -> Cmd Msg
-markDone id =
-    Task.perform
-        (\time ->
-            UpdateTask id
-                (\task ->
-                    { task
-                        | doneAt =
-                            choose
-                                Nothing
-                                (Just time)
-                                (Maybe.isJust task.doneAt)
-                    }
-                )
-        )
-        Time.now
-
-handleUpdateTask : TaskId -> (Task -> Task) -> Model -> Model
-handleUpdateTask id f model =
-    {
-        model |
-        tasks = updateTask f model id
-    }
-
-focusInput : Cmd Msg
-focusInput =
-    Task.attempt (\_ -> NoOp) (Browser.Dom.focus "input")
-
-
-type alias Update =
-    Msg -> Model -> ( Model, Cmd Msg )
-
-
-handleMsg : Update
-handleMsg msg =
-    case msg of
-        SetText s ->
-            noCmd <| setText s
-
-        SubmitInput ->
-            handleMainInput
-
-        Tabfill ->
-            tryLog tabfill
-
-        RemoveTask id ->
-            noCmd <| removeTask id
-
-        ToggleStyle ->
-            noCmd <| toggleStyle
-
-        SetProject clearText target ->
-            noCmd <| setProject clearText target
-
-        DeleteProject target ->
-            noCmd <| deleteProject target
-
-        LoadModel m ->
-            noCmd <| loadModel m
-
-        SetViewState state ->
-            noCmd <| setViewState state
-
-        FocusInput ->
-            onlyCmd <| always focusInput
-
-        AddTask text project time ->
-            noCmd <| addTaskToModel text project time
-
-        MarkDone taskId ->
-            onlyCmd <| always <| markDone taskId
-        
-        UpdateTask taskId f ->
-            noCmd <| handleUpdateTask taskId f
-
-        NoOp ->
-            noCmd identity
-
-
-saveChangedTasks : Update -> Update
-saveChangedTasks updater msg model =
-    let
-        comp m =
-            ( m.tasks, m.projects )
-
-        ( newModel, cmds ) =
-            updater msg model
-
-        saveCmd =
-            if comp model /= comp newModel then
-                Interop.save newModel
-
-            else
-                Cmd.none
-    in
-    ( newModel, Cmd.batch [ saveCmd, cmds ] )
-
-
-handleEditState : Update -> Update
-handleEditState updater msg model =
-    case model.viewState of
-        Edit task ->
-            case msg of
-                SubmitInput ->
-                    ( editTaskInModel task model.text model, Cmd.none )
-
-                Tabfill ->
-                    -- We don't want to do anything here
-                    ( model, Cmd.none )
-
-                _ ->
-                    updater msg model
-
-        _ ->
-            updater msg model
-
-
-disableIf : (Msg -> Bool) -> (Update -> Update) -> Update -> Update
-disableIf pred mw f msg =
-    if pred msg then
-        f msg
-
-    else
-        mw f msg
-
-
-update : Update
-update =
-    handleMsg
-        |> handleEditState
-        |> disableIf isLoadModel saveChangedTasks
 
 
 paddingScale : Int -> Int
