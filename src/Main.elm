@@ -27,6 +27,8 @@ import Tasks.Model exposing (..)
 import Tasks.Style exposing (..)
 import Tasks.Utils exposing (..)
 import Tuple exposing (first)
+import Time
+import Prng.Uuid exposing (Uuid)
 
 
 main : Program ( Int, List Int ) Model Msg
@@ -80,8 +82,8 @@ projectSearch model =
             Nothing
 
 
-addTaskToModel : String -> Maybe String -> Model -> Model
-addTaskToModel text project model =
+addTaskToModel : String -> Maybe String -> Time.Posix -> Model -> Model
+addTaskToModel text project time model =
     let
         ( uuid, seed ) =
             Pcg.step Prng.Uuid.generator model.seed
@@ -89,10 +91,14 @@ addTaskToModel text project model =
     { model
         | text = ""
         , seed = seed
-        , tasks = Task text project uuid :: model.tasks
+        , tasks = Task text project uuid time :: model.tasks
     }
 
+addTask : String -> Maybe String -> Cmd Msg
+addTask text project = Task.perform (AddTask text project) Time.now
 
+
+editTaskInModel : Task -> String -> Model -> Model
 editTaskInModel task text model =
     { model
         | tasks = updateTask (\t -> { t | text = text }) model task.id
@@ -101,19 +107,19 @@ editTaskInModel task text model =
     }
 
 
-handleMainInput : Model -> Result String Model
+handleMainInput : Model -> (Model, Cmd Msg)
 handleMainInput model =
     case parseInput model.text of
         Ok (Tasks.Input.Text text) ->
             case model.viewState of
                 None ->
-                    Ok (addTaskToModel text model.project model)
+                    (model, addTask text model.project)
 
                 Selected _ ->
-                    Ok (addTaskToModel text model.project model)
+                    (model, addTask text model.project)
 
                 Edit task ->
-                    Ok (editTaskInModel task text model)
+                    (editTaskInModel task text model, Cmd.none)
 
         Ok (Tasks.Input.Project project) ->
             let
@@ -137,10 +143,10 @@ handleMainInput model =
                             , text = ""
                         }
             in
-            Ok newModel
+            ( newModel, Cmd.none )
 
         Err _ ->
-            Err "Parsing failed"
+            (model, Interop.log "Parsing failed")
 
 
 findCommonPrefix : List String -> Maybe String
@@ -204,22 +210,27 @@ noCmd f x =
     ( f x, Cmd.none )
 
 
+onlyCmd : (model -> Cmd msg) -> model -> (model, Cmd msg)
 onlyCmd f x =
     ( x, f x )
 
 
+setText : String -> Model -> Model
 setText s model =
     { model | text = s }
 
 
+removeTask : Uuid -> Model -> Model
 removeTask id model =
     { model | tasks = List.filter (\t -> t.id /= id) model.tasks }
 
 
+toggleStyle : Model -> Model
 toggleStyle model =
     { model | style = choose darkStyle lightStyle (model.style == lightStyle) }
 
 
+setProject : Bool -> String -> Model -> Model
 setProject clearText target model =
     let
         newProject =
@@ -233,6 +244,7 @@ setProject clearText target model =
     }
 
 
+deleteProject : String -> Model -> Model
 deleteProject target model =
     { model
         | projects = List.filter ((/=) target) model.projects
@@ -240,6 +252,7 @@ deleteProject target model =
     }
 
 
+loadModel : Model -> Model -> Model
 loadModel m model =
     { model
         | tasks = m.tasks
@@ -247,18 +260,20 @@ loadModel m model =
     }
 
 
+setViewState : ViewState -> Model -> Model
 setViewState state model =
     case state of
         None ->
-            Ok { model | viewState = state }
+            { model | viewState = state }
 
         Selected _ ->
-            Ok { model | viewState = state }
+            { model | viewState = state }
 
         Edit task ->
-            Ok { model | viewState = state, text = task.text }
+            { model | viewState = state, text = task.text }
 
 
+focusInput : Cmd Msg
 focusInput =
     Task.attempt (\_ -> NoOp) (Browser.Dom.focus "input")
 
@@ -274,7 +289,7 @@ handleMsg msg =
             noCmd <| setText s
 
         SubmitInput ->
-            tryLog handleMainInput
+            handleMainInput
 
         Tabfill ->
             tryLog tabfill
@@ -295,10 +310,13 @@ handleMsg msg =
             noCmd <| loadModel m
 
         SetViewState state ->
-            tryLog <| setViewState state
+            noCmd <| setViewState state
 
         FocusInput ->
             onlyCmd <| always focusInput
+        
+        AddTask text project time ->
+            noCmd <| addTaskToModel text project time
 
         NoOp ->
             noCmd identity
@@ -323,6 +341,7 @@ saveChangedTasks updater msg model =
     ( newModel, Cmd.batch [ saveCmd, cmds ] )
 
 
+disableIf : (Msg -> Bool) -> (Update -> Update) -> Update -> Update
 disableIf pred mw f msg =
     if pred msg then
         f msg
@@ -607,6 +626,7 @@ onKeys pairs =
         |> htmlAttribute
 
 
+onClickNoPropagate : msg -> Attribute msg
 onClickNoPropagate msg =
     D.succeed ( msg, True )
         |> HtmlEvents.stopPropagationOn "click"

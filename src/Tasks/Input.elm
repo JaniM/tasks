@@ -8,6 +8,7 @@ type InputDesc
     | Project String
 
 
+projectPrefix : String
 projectPrefix = "project:"
 
 parseInput : String -> Result (List DeadEnd) InputDesc

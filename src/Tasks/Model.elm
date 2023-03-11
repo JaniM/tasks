@@ -4,6 +4,7 @@ import List.Extra as List
 import Prng.Uuid exposing (Uuid)
 import Random.Pcg.Extended as Pcg
 import Tasks.Style exposing (Style)
+import Time
 
 
 type alias TaskId =
@@ -14,6 +15,7 @@ type alias Task =
     { text : String
     , project : Maybe String
     , id : TaskId
+    , createdAt : Time.Posix
     }
 
 
@@ -45,6 +47,7 @@ type Msg
     | LoadModel Model
     | SetViewState ViewState
     | FocusInput
+    | AddTask String (Maybe String) Time.Posix
     | NoOp
 
 
@@ -60,6 +63,7 @@ emptyModel =
     }
 
 
+isLoadModel : Msg -> Bool
 isLoadModel msg =
     case msg of
         LoadModel _ ->
@@ -84,6 +88,7 @@ countTasks tasks p =
     tasks |> filterTasksByProject (Just p) |> List.length
 
 
+viewStateIsSelected : Model -> Bool
 viewStateIsSelected model =
     case model.viewState of
         Selected _ ->
@@ -93,8 +98,10 @@ viewStateIsSelected model =
             False
 
 
+findTask : Model -> Uuid -> Maybe Task
 findTask model id =
     List.find (\x -> x.id == id) model.tasks
     
+updateTask : (Task -> Task) -> Model -> Uuid -> List Task
 updateTask f model id =
     List.updateIf (\x -> x.id == id) f model.tasks
