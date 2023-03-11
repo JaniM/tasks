@@ -18,7 +18,7 @@ import Json.Decode as D
 import Json.Decode.Extra as D
 import List.Extra as List
 import Maybe.Extra as Maybe
-import Prng.Uuid
+import Prng.Uuid exposing (Uuid)
 import Random.Pcg.Extended as Pcg
 import Task
 import Tasks.Input exposing (..)
@@ -26,9 +26,8 @@ import Tasks.Interop as Interop
 import Tasks.Model exposing (..)
 import Tasks.Style exposing (..)
 import Tasks.Utils exposing (..)
-import Tuple exposing (first)
 import Time
-import Prng.Uuid exposing (Uuid)
+import Tuple exposing (first)
 
 
 main : Program ( Int, List Int ) Model Msg
@@ -94,8 +93,10 @@ addTaskToModel text project time model =
         , tasks = Task text project uuid time :: model.tasks
     }
 
+
 addTask : String -> Maybe String -> Cmd Msg
-addTask text project = Task.perform (AddTask text project) Time.now
+addTask text project =
+    Task.perform (AddTask text project) Time.now
 
 
 editTaskInModel : Task -> String -> Model -> Model
@@ -107,19 +108,11 @@ editTaskInModel task text model =
     }
 
 
-handleMainInput : Model -> (Model, Cmd Msg)
+handleMainInput : Model -> ( Model, Cmd Msg )
 handleMainInput model =
     case parseInput model.text of
         Ok (Tasks.Input.Text text) ->
-            case model.viewState of
-                None ->
-                    (model, addTask text model.project)
-
-                Selected _ ->
-                    (model, addTask text model.project)
-
-                Edit task ->
-                    (editTaskInModel task text model, Cmd.none)
+            ( model, addTask text model.project )
 
         Ok (Tasks.Input.Project project) ->
             let
@@ -146,7 +139,7 @@ handleMainInput model =
             ( newModel, Cmd.none )
 
         Err _ ->
-            (model, Interop.log "Parsing failed")
+            ( model, Interop.log "Parsing failed" )
 
 
 findCommonPrefix : List String -> Maybe String
@@ -210,7 +203,7 @@ noCmd f x =
     ( f x, Cmd.none )
 
 
-onlyCmd : (model -> Cmd msg) -> model -> (model, Cmd msg)
+onlyCmd : (model -> Cmd msg) -> model -> ( model, Cmd msg )
 onlyCmd f x =
     ( x, f x )
 
@@ -314,7 +307,7 @@ handleMsg msg =
 
         FocusInput ->
             onlyCmd <| always focusInput
-        
+
         AddTask text project time ->
             noCmd <| addTaskToModel text project time
 
@@ -341,6 +334,25 @@ saveChangedTasks updater msg model =
     ( newModel, Cmd.batch [ saveCmd, cmds ] )
 
 
+handleEditState : Update -> Update
+handleEditState updater msg model =
+    case model.viewState of
+        Edit task ->
+            case msg of
+                SubmitInput ->
+                    ( editTaskInModel task model.text model, Cmd.none )
+
+                Tabfill ->
+                    -- We don't want to do anything here
+                    ( model, Cmd.none )
+
+                _ ->
+                    updater msg model
+
+        _ ->
+            updater msg model
+
+
 disableIf : (Msg -> Bool) -> (Update -> Update) -> Update -> Update
 disableIf pred mw f msg =
     if pred msg then
@@ -352,7 +364,9 @@ disableIf pred mw f msg =
 
 update : Update
 update =
-    handleMsg |> disableIf isLoadModel saveChangedTasks
+    handleMsg
+        |> handleEditState
+        |> disableIf isLoadModel saveChangedTasks
 
 
 paddingScale : Int -> Int
