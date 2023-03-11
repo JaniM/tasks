@@ -93,9 +93,9 @@ addTaskToModel text project model =
     }
 
 
-editTaskInModel id text model =
+editTaskInModel task text model =
     { model
-        | tasks = updateTask (\task -> { task | text = text }) model id
+        | tasks = updateTask (\t -> { t | text = text }) model task.id
         , viewState = None
         , text = ""
     }
@@ -112,8 +112,8 @@ handleMainInput model =
                 Selected _ ->
                     Ok (addTaskToModel text model.project model)
 
-                Edit id ->
-                    Ok (editTaskInModel id text model)
+                Edit task ->
+                    Ok (editTaskInModel task text model)
 
         Ok (Tasks.Input.Project project) ->
             let
@@ -255,13 +255,12 @@ setViewState state model =
         Selected _ ->
             Ok { model | viewState = state }
 
-        Edit taskId ->
-            case findTask model taskId of
-                Nothing ->
-                    Err "Can't find task"
+        Edit task ->
+            Ok { model | viewState = state, text = task.text }
 
-                Just task ->
-                    Ok { model | viewState = state, text = task.text }
+
+focusInput =
+    Task.attempt (\_ -> NoOp) (Browser.Dom.focus "input")
 
 
 type alias Update =
@@ -299,7 +298,7 @@ handleMsg msg =
             tryLog <| setViewState state
 
         FocusInput ->
-            onlyCmd (always (Task.attempt (\_ -> NoOp) (Browser.Dom.focus "input")))
+            onlyCmd <| always focusInput
 
         NoOp ->
             noCmd identity
@@ -391,14 +390,6 @@ contentRow model =
                 Nothing ->
                     Element.Lazy.lazy4 viewTasks model.style model.project model.viewState model.tasks
 
-        edit id =
-            case findTask model id of
-                Just task ->
-                    viewTaskEdit model task
-
-                Nothing ->
-                    text "This can't happen :clueless:"
-
         pane =
             case model.viewState of
                 None ->
@@ -407,8 +398,8 @@ contentRow model =
                 Selected _ ->
                     listing
 
-                Edit id ->
-                    edit id
+                Edit task ->
+                    viewTaskEdit model task
     in
     row [ width fill, height fill, clip ]
         [ projectList model
@@ -571,7 +562,7 @@ viewTask style selected task =
                 [ padding (paddingScale 1)
                 , Background.color style.buttonBackground
                 , Font.size (style.textSize -1)
-                , onClickNoPropagate (SetViewState (Edit task.id))
+                , onClickNoPropagate (SetViewState (Edit task))
                 ]
                 { onPress = Nothing
                 , label = text "Edit"

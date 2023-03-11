@@ -31,7 +31,7 @@ type alias Model =
 type ViewState
     = None
     | Selected TaskId
-    | Edit TaskId
+    | Edit Task
 
 
 type Msg
