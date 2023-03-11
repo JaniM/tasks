@@ -88,6 +88,7 @@ encodeModel model =
                 , ( "id", Prng.Uuid.encode t.id )
                 , ( "project", E.maybe E.string t.project )
                 , ( "createdAt", encodeTime t.createdAt )
+                , ( "doneAt", E.maybe encodeTime t.doneAt )
                 ]
     in
     E.object
@@ -100,11 +101,12 @@ decodeModel : D.Decoder Model
 decodeModel =
     let
         task =
-            D.map4 Task
+            D.map5 Task
                 (D.field "text" D.string)
                 (D.field "project" (D.maybe D.string))
                 (D.field "id" Prng.Uuid.decoder)
                 (D.field "createdAt" decodeTime)
+                (D.field "doneAt" (D.maybe decodeTime))
 
         model tasks projects =
             { emptyModel | tasks = tasks, projects = projects }

@@ -16,6 +16,7 @@ type alias Task =
     , project : Maybe String
     , id : TaskId
     , createdAt : Time.Posix
+    , doneAt : Maybe Time.Posix
     }
 
 
@@ -39,15 +40,18 @@ type ViewState
 type Msg
     = SetText String
     | SubmitInput
+    | Tabfill
+    | AddTask String (Maybe String) Time.Posix
     | RemoveTask Uuid
+    | UpdateTask TaskId (Task -> Task)
+    -- TODO: Maybe this should be generalized to something like SendCmd?
+    | MarkDone TaskId
     | ToggleStyle
     | SetProject Bool String
     | DeleteProject String
-    | Tabfill
     | LoadModel Model
     | SetViewState ViewState
     | FocusInput
-    | AddTask String (Maybe String) Time.Posix
     | NoOp
 
 
@@ -101,7 +105,8 @@ viewStateIsSelected model =
 findTask : Model -> Uuid -> Maybe Task
 findTask model id =
     List.find (\x -> x.id == id) model.tasks
-    
+
+
 updateTask : (Task -> Task) -> Model -> Uuid -> List Task
 updateTask f model id =
     List.updateIf (\x -> x.id == id) f model.tasks

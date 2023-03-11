@@ -90,7 +90,7 @@ addTaskToModel text project time model =
     { model
         | text = ""
         , seed = seed
-        , tasks = Task text project uuid time :: model.tasks
+        , tasks = Task text project uuid time Nothing :: model.tasks
     }
 
 
@@ -266,6 +266,30 @@ setViewState state model =
             { model | viewState = state, text = task.text }
 
 
+markDone : TaskId -> Cmd Msg
+markDone id =
+    Task.perform
+        (\time ->
+            UpdateTask id
+                (\task ->
+                    { task
+                        | doneAt =
+                            choose
+                                Nothing
+                                (Just time)
+                                (Maybe.isJust task.doneAt)
+                    }
+                )
+        )
+        Time.now
+
+handleUpdateTask : TaskId -> (Task -> Task) -> Model -> Model
+handleUpdateTask id f model =
+    {
+        model |
+        tasks = updateTask f model id
+    }
+
 focusInput : Cmd Msg
 focusInput =
     Task.attempt (\_ -> NoOp) (Browser.Dom.focus "input")
@@ -310,6 +334,12 @@ handleMsg msg =
 
         AddTask text project time ->
             noCmd <| addTaskToModel text project time
+
+        MarkDone taskId ->
+            onlyCmd <| always <| markDone taskId
+        
+        UpdateTask taskId f ->
+            noCmd <| handleUpdateTask taskId f
 
         NoOp ->
             noCmd identity
@@ -590,6 +620,12 @@ viewTask style selected task =
                 , label = text "Remove"
                 }
 
+        done =
+            button
+                { onPress = Just (MarkDone task.id)
+                , label = text "Done"
+                }
+
         edit =
             Input.button
                 [ padding (paddingScale 1)
@@ -609,16 +645,25 @@ viewTask style selected task =
                     , padding (paddingScale 2)
                     , spacing (paddingScale 2)
                     ]
-                    [ edit, remove ]
+                    [ done, edit, remove ]
 
             else
                 Element.none
+
+        color =
+            if Maybe.isJust task.doneAt then
+                style.doneBackground
+
+            else if selected then
+                style.buttonBackground
+
+            else
+                style.taskBackground
     in
     row
         [ width fill
         , padding (paddingScale 1)
-        , Background.color
-            (choose style.buttonBackground style.taskBackground selected)
+        , Background.color color
         , spacing (paddingScale 1)
         , below dropdown
         , onClickNoPropagate (SetViewState (Selected task.id))
