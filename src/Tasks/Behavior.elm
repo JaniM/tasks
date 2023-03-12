@@ -177,11 +177,28 @@ setViewState state model =
         None ->
             { model | viewState = state }
 
-        Selected _ ->
+        Selected _ _ ->
+            { model | viewState = state }
+
+        ShowDone ->
             { model | viewState = state }
 
         Edit task ->
             { model | viewState = state, text = task.text }
+
+
+selectTask : TaskId -> Model -> Model
+selectTask id model =
+    let
+        oldState =
+            case model.viewState of
+                Selected _ state ->
+                    state
+
+                state ->
+                    state
+    in
+    { model | viewState = Selected id oldState }
 
 
 markDone : TaskId -> Cmd Msg
@@ -209,6 +226,11 @@ handleUpdateTask id f model =
 focusInput : Cmd Msg
 focusInput =
     Task.attempt (\_ -> NoOp) (Browser.Dom.focus "input")
+
+
+setTimeZone : Time.Zone -> Model -> Model
+setTimeZone zone model =
+    { model | timeZone = zone }
 
 
 type alias Update =
@@ -245,6 +267,9 @@ handleMsg msg =
         SetViewState state ->
             noCmd <| setViewState state
 
+        SelectTask id ->
+            noCmd <| selectTask id
+
         FocusInput ->
             onlyCmd <| always focusInput
 
@@ -256,6 +281,9 @@ handleMsg msg =
 
         UpdateTask taskId f ->
             noCmd <| handleUpdateTask taskId f
+
+        SetTimeZone zone ->
+            noCmd <| setTimeZone zone
 
         NoOp ->
             noCmd identity

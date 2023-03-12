@@ -6,18 +6,19 @@ module Tasks.Model exposing
     , ViewState(..)
     , countTasks
     , emptyModel
-    , filterTasksByProject
+    , filterTasks
     , findCommonPrefix
     , findProjectsMatchingSearch
     , findTask
     , isLoadModel
     , updateTask
-    , viewStateIsSelected
     )
 
 import List.Extra as List
+import Maybe.Extra as Maybe
 import Prng.Uuid exposing (Uuid)
 import Random.Pcg.Extended as Pcg
+import Tasks.Input exposing (InputDesc(..))
 import Tasks.Style exposing (Style)
 import Time
 
@@ -43,13 +44,15 @@ type alias Model =
     , seed : Pcg.Seed
     , style : Style
     , viewState : ViewState
+    , timeZone : Time.Zone
     }
 
 
 type ViewState
     = None
-    | Selected TaskId
+    | Selected TaskId ViewState
     | Edit Task
+    | ShowDone
 
 
 type Msg
@@ -66,7 +69,9 @@ type Msg
     | DeleteProject String
     | LoadModel Model
     | SetViewState ViewState
+    | SelectTask TaskId
     | FocusInput
+    | SetTimeZone Time.Zone
     | NoOp
 
 
@@ -79,6 +84,7 @@ emptyModel =
     , style = Tasks.Style.darkStyle
     , project = Nothing
     , viewState = None
+    , timeZone = Time.utc
     }
 
 
@@ -102,19 +108,22 @@ filterTasksByProject project tasks =
             tasks
 
 
+type alias Filter =
+    { project : Maybe String
+    , done : Bool
+    }
+
+
+filterTasks : Filter -> List Task -> List Task
+filterTasks filter tasks =
+    tasks
+        |> filterTasksByProject filter.project
+        |> List.filter (\t -> Maybe.isJust t.doneAt == filter.done)
+
+
 countTasks : List Task -> String -> Int
 countTasks tasks p =
     tasks |> filterTasksByProject (Just p) |> List.length
-
-
-viewStateIsSelected : Model -> Bool
-viewStateIsSelected model =
-    case model.viewState of
-        Selected _ ->
-            True
-
-        _ ->
-            False
 
 
 findTask : Model -> Uuid -> Maybe Task

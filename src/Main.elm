@@ -19,12 +19,16 @@ import List.Extra as List
 import Maybe.Extra as Maybe
 import Prng.Uuid
 import Random.Pcg.Extended as Pcg
+import Task
 import Tasks.Behavior
 import Tasks.Input exposing (..)
 import Tasks.Interop as Interop
 import Tasks.Model exposing (..)
 import Tasks.Style exposing (..)
 import Tasks.Utils exposing (..)
+import Time
+import Time.Format
+import Time.Format.Config.Config_fi_fi
 
 
 main : Program ( Int, List Int ) Model Msg
@@ -46,7 +50,12 @@ init ( seed, seedExtension ) =
         start =
             { empty | seed = Pcg.initialSeed seed seedExtension }
     in
-    ( start, Interop.load )
+    ( start
+    , Cmd.batch
+        [ Interop.load
+        , Task.perform SetTimeZone Time.here
+        ]
+    )
 
 
 subscriptions : Model -> Sub Msg
@@ -90,11 +99,20 @@ leftBarWidth =
 
 view : Model -> Html Msg
 view model =
+    let
+        newState =
+            case model.viewState of
+                Selected _ n ->
+                    SetViewState n
+
+                _ ->
+                    NoOp
+    in
     layout
         [ Background.color model.style.background
         , Font.color model.style.textColor
         , Font.size (model.style.textSize 1)
-        , onClick (choose (SetViewState None) NoOp (viewStateIsSelected model))
+        , onClick newState
         ]
         (topView model)
 
@@ -109,16 +127,33 @@ topRow : Model -> Element Msg
 topRow model =
     row
         [ width fill ]
-        [ toggleStyleButton, viewTaskInput model ]
+        [ row [ width leftBarWidth ]
+            [ toggleStyleButton
+            , showDoneButton model.style model.viewState
+            ]
+        , viewTaskInput model
+        ]
 
 
 toggleStyleButton : Element Msg
 toggleStyleButton =
-    el [ width leftBarWidth, padding (paddingScale 2) ] <|
+    el [ padding (paddingScale 2) ] <|
         Input.button [ noFocusStyle ]
             { onPress = Just ToggleStyle
             , label = text "🌘"
             }
+
+
+showDoneButton : Style -> ViewState -> Element Msg
+showDoneButton style current =
+    Input.button
+        [ noFocusStyle
+        , padding (paddingScale 1)
+        , Background.color (choose style.buttonBackground style.doneBackground (current /= ShowDone))
+        ]
+        { onPress = Just <| SetViewState <| choose None ShowDone (current == ShowDone)
+        , label = text "Show Done"
+        }
 
 
 contentRow : Model -> Element Msg
@@ -132,20 +167,23 @@ contentRow model =
                 Nothing ->
                     Element.Lazy.lazy4 viewTasks model.style model.project model.viewState model.tasks
 
-        pane =
-            case model.viewState of
+        pane state =
+            case state of
                 None ->
                     listing
 
-                Selected _ ->
-                    listing
+                Selected _ s ->
+                    pane s
 
                 Edit task ->
                     viewTaskEdit model task
+
+                ShowDone ->
+                    viewDoneTasksTimeline model.timeZone model.style model.project model.viewState model.tasks
     in
     row [ width fill, height fill, clip ]
         [ projectList model
-        , pane
+        , pane model.viewState
         ]
 
 
@@ -260,15 +298,25 @@ viewEmptyProject style project =
             ]
 
 
+isSelected : ViewState -> Task -> Bool
+isSelected viewState task =
+    case viewState of
+        Selected id _ ->
+            id == task.id
+
+        _ ->
+            False
+
+
 viewTasks : Style -> Maybe String -> ViewState -> List Task -> Element Msg
 viewTasks style project viewState tasks =
     let
         task_ task =
             ( Prng.Uuid.toString task.id
-            , viewTask style (viewState == Selected task.id) task
+            , viewTask style (isSelected viewState task) task
             )
     in
-    case ( filterTasksByProject project tasks, project ) of
+    case ( filterTasks { project = project, done = False } tasks, project ) of
         ( [], Just p ) ->
             viewEmptyProject style p
 
@@ -345,11 +393,67 @@ viewTask style selected task =
         , Background.color color
         , spacing (paddingScale 1)
         , below dropdown
-        , onClickNoPropagate (SetViewState (Selected task.id))
+        , onClickNoPropagate (SelectTask task.id)
         ]
         [ paragraph [ width fill ] [ text task.text ]
         , text (Maybe.withDefault "No project" task.project)
         ]
+
+
+viewDoneTasksTimeline : Time.Zone -> Style -> Maybe String -> ViewState -> List Task -> Element Msg
+viewDoneTasksTimeline zone style project viewState tasks =
+    let
+        task_ task =
+            ( Prng.Uuid.toString task.id
+            , viewTask style (isSelected viewState task) task
+            )
+
+        posixToDate =
+            Time.Format.format Time.Format.Config.Config_fi_fi.config "%d.%m.%y" zone
+
+        group_ ( key, group ) =
+            ( key |> Time.posixToMillis |> String.fromInt
+            , column [ width fill ]
+                [ text (posixToDate key)
+                , Element.Keyed.column
+                    [ width fill
+                    , spacing (paddingScale 2)
+                    , Element.paddingEach { left = paddingScale 4, top = paddingScale 2, right = 0, bottom = 0 }
+                    ]
+                    (List.map task_ group)
+                ]
+            )
+
+        groups : List ( Time.Posix, List Task )
+        groups =
+            filterTasks { project = project, done = True } tasks
+                |> List.sortBy (\t -> -(Maybe.unwrap 0 Time.posixToMillis t.doneAt))
+                |> List.groupWhile
+                    (\a b ->
+                        Maybe.map2 (equalDate zone) a.doneAt b.doneAt
+                            |> Maybe.unwrap False identity
+                    )
+                |> List.map
+                    (\( key, group ) ->
+                        ( key.doneAt
+                            |> Maybe.unwrap (Time.millisToPosix 0) identity
+                        , key :: group
+                        )
+                    )
+    in
+    Element.Keyed.column
+        [ width fill
+        , height fill
+        , spacing (paddingScale 2)
+        , padding (paddingScale 2)
+        , scrollbarY
+        ]
+        (List.map group_ groups)
+
+
+equalDate : Time.Zone -> Time.Posix -> Time.Posix -> Bool
+equalDate z a b =
+    Time.toDay z a == Time.toDay z b && Time.toMonth z a == Time.toMonth z b && Time.toYear z a == Time.toYear z b
 
 
 onKeys : List ( String, msg ) -> Attribute msg
