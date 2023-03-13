@@ -425,11 +425,10 @@ viewDoneTasksTimeline zone style viewState tasks =
 
         groups : List ( Time.Posix, List Task )
         groups =
-            tasks
-                |> List.sortBy (\t -> -(Maybe.unwrap 0 Time.posixToMillis t.doneAt))
-                |> groupByKey
-                    (\t -> Maybe.unwrap epoch identity t.doneAt)
-                    (equalDate zone)
+            groupByKey
+                (\t -> Maybe.unwrap epoch identity t.doneAt)
+                (equalDate zone)
+                tasks
     in
     Element.Keyed.column
         [ width fill

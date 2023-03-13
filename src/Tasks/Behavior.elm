@@ -1,6 +1,7 @@
 module Tasks.Behavior exposing (update)
 
 import Browser.Dom
+import Cmd.Extra as Cmd
 import Dict
 import List.Extra as List
 import Maybe.Extra as Maybe
@@ -297,17 +298,14 @@ handleMsg msg =
 executeIfChanged : (Model -> key) -> (Model -> ( Model, Cmd Msg )) -> Update -> Update
 executeIfChanged comp mw updater msg model =
     let
-        ( newModel, cmds ) =
+        ( newModel, cmd ) =
             updater msg model
-
-        ( endModel, newCmds ) =
-            if comp model /= comp newModel then
-                mw newModel
-
-            else
-                ( newModel, Cmd.none )
     in
-    ( endModel, Cmd.batch [ cmds, newCmds ] )
+    if comp model /= comp newModel then
+        mw newModel |> Cmd.addCmd cmd
+
+    else
+        ( newModel, cmd )
 
 
 disableIf : (Msg -> Bool) -> (Update -> Update) -> Update -> Update
@@ -321,18 +319,14 @@ disableIf pred mw f msg =
 
 handleEditState : Update -> Update
 handleEditState updater msg model =
-    case model.viewState of
-        Edit task ->
-            case msg of
-                SubmitInput ->
-                    ( editTaskInModel task model.text model, Cmd.none )
+    case ( model.viewState, msg ) of
+        ( Edit task, SubmitInput ) ->
+            editTaskInModel task model.text model
+                |> Cmd.withNoCmd
 
-                Tabfill ->
-                    -- We don't want to do anything here
-                    ( model, Cmd.none )
-
-                _ ->
-                    updater msg model
+        ( Edit _, Tabfill ) ->
+            -- We don't want to do anything here
+            model |> Cmd.withNoCmd
 
         _ ->
             updater msg model
@@ -340,6 +334,18 @@ handleEditState updater msg model =
 
 updateFilteredTasks : Model -> Model
 updateFilteredTasks model =
+    let
+        sortRule v =
+            case v of
+                Selected _ x ->
+                    sortRule x
+
+                ShowDone ->
+                    \t -> -(Maybe.unwrap 0 Time.posixToMillis t.doneAt)
+
+                _ ->
+                    \t -> -(Time.posixToMillis t.createdAt)
+    in
     { model
         | filteredTasks =
             Dict.toList model.tasks
@@ -348,7 +354,7 @@ updateFilteredTasks model =
                     { project = model.project
                     , done = Model.showDoneTasks model.viewState
                     }
-                |> List.sortBy (\t -> -(Time.posixToMillis t.createdAt))
+                |> List.sortBy (sortRule model.viewState)
     }
 
 
