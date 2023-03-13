@@ -1,12 +1,12 @@
 port module Tasks.Interop exposing (FromJs(..), load, log, save, subscribe)
 
+import Dict
 import Json.Decode as D
 import Json.Decode.Extra as D
 import Json.Encode as E
 import Json.Encode.Extra as E
-import Prng.Uuid
 import Result.Extra as Result
-import Tasks.Model exposing (Model, Task, emptyModel)
+import Tasks.Model exposing (Model, Task, TaskId, emptyModel)
 import Tasks.Utils exposing (fmap)
 import Time
 
@@ -82,17 +82,17 @@ selectResponse key =
 encodeModel : Model -> E.Value
 encodeModel model =
     let
+        task : Task -> D.Value
         task t =
             E.object
                 [ ( "text", E.string t.text )
-                , ( "id", Prng.Uuid.encode t.id )
                 , ( "project", E.maybe E.string t.project )
                 , ( "createdAt", encodeTime t.createdAt )
                 , ( "doneAt", E.maybe encodeTime t.doneAt )
                 ]
     in
     E.object
-        [ ( "tasks", E.list task model.tasks )
+        [ ( "tasks", E.dict identity task model.tasks )
         , ( "projects", E.list E.string model.projects )
         ]
 
@@ -100,11 +100,11 @@ encodeModel model =
 decodeModel : D.Decoder Model
 decodeModel =
     let
+        task : D.Decoder (TaskId -> Task)
         task =
-            D.map5 Task
+            D.map4 Task
                 (D.field "text" D.string)
                 (D.field "project" (D.maybe D.string))
-                (D.field "id" Prng.Uuid.decoder)
                 (D.field "createdAt" decodeTime)
                 (D.field "doneAt" (D.maybe decodeTime))
 
@@ -112,7 +112,9 @@ decodeModel =
             { emptyModel | tasks = tasks, projects = projects }
     in
     D.map2 model
-        (D.field "tasks" (D.list task))
+        (D.field "tasks" (D.dict task)
+            |> D.map (Dict.map (\k v -> v k))
+        )
         (D.field "projects" (D.list D.string))
 
 

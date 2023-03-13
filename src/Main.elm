@@ -17,7 +17,6 @@ import Json.Decode as D
 import Json.Decode.Extra as D
 import List.Extra as List
 import Maybe.Extra as Maybe
-import Prng.Uuid
 import Random.Pcg.Extended as Pcg
 import Task
 import Tasks.Behavior
@@ -165,7 +164,12 @@ contentRow model =
                     viewProjectSearch model text
 
                 Nothing ->
-                    Element.Lazy.lazy4 viewTasks model.style model.project model.viewState model.tasks
+                    case ( model.filteredTasks, model.project ) of
+                        ( [], Just p ) ->
+                            viewEmptyProject model.style p
+
+                        ( filteredTasks, _ ) ->
+                            Element.Lazy.lazy3 viewTasks model.style model.viewState filteredTasks
 
         pane state =
             case state of
@@ -179,7 +183,7 @@ contentRow model =
                     viewTaskEdit model task
 
                 ShowDone ->
-                    viewDoneTasksTimeline model.timeZone model.style model.project model.viewState model.tasks
+                    viewDoneTasksTimeline model.timeZone model.style model.viewState model.filteredTasks
     in
     row [ width fill, height fill, clip ]
         [ projectList model
@@ -308,27 +312,22 @@ isSelected viewState task =
             False
 
 
-viewTasks : Style -> Maybe String -> ViewState -> List Task -> Element Msg
-viewTasks style project viewState tasks =
+viewTasks : Style -> ViewState -> List Task -> Element Msg
+viewTasks style viewState tasks =
     let
         task_ task =
-            ( Prng.Uuid.toString task.id
+            ( task.id
             , viewTask style (isSelected viewState task) task
             )
     in
-    case ( filterTasks { project = project, done = False } tasks, project ) of
-        ( [], Just p ) ->
-            viewEmptyProject style p
-
-        ( filteredTasks, _ ) ->
-            Element.Keyed.column
-                [ width fill
-                , height fill
-                , spacing (paddingScale 2)
-                , padding (paddingScale 2)
-                , scrollbarY
-                ]
-                (List.map task_ filteredTasks)
+    Element.Keyed.column
+        [ width fill
+        , height fill
+        , spacing (paddingScale 2)
+        , padding (paddingScale 2)
+        , scrollbarY
+        ]
+        (List.map task_ tasks)
 
 
 viewTask : Style -> Bool -> Task -> Element Msg
@@ -400,11 +399,11 @@ viewTask style selected task =
         ]
 
 
-viewDoneTasksTimeline : Time.Zone -> Style -> Maybe String -> ViewState -> List Task -> Element Msg
-viewDoneTasksTimeline zone style project viewState tasks =
+viewDoneTasksTimeline : Time.Zone -> Style -> ViewState -> List Task -> Element Msg
+viewDoneTasksTimeline zone style viewState tasks =
     let
         task_ task =
-            ( Prng.Uuid.toString task.id
+            ( task.id
             , viewTask style (isSelected viewState task) task
             )
 
@@ -426,7 +425,7 @@ viewDoneTasksTimeline zone style project viewState tasks =
 
         groups : List ( Time.Posix, List Task )
         groups =
-            filterTasks { project = project, done = True } tasks
+            tasks
                 |> List.sortBy (\t -> -(Maybe.unwrap 0 Time.posixToMillis t.doneAt))
                 |> groupByKey
                     (\t -> Maybe.unwrap epoch identity t.doneAt)

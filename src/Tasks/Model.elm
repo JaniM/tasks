@@ -14,9 +14,9 @@ module Tasks.Model exposing
     , updateTask
     )
 
+import Dict exposing (Dict)
 import List.Extra as List
 import Maybe.Extra as Maybe
-import Prng.Uuid exposing (Uuid)
 import Random.Pcg.Extended as Pcg
 import Tasks.Input exposing (InputDesc(..))
 import Tasks.Style exposing (Style)
@@ -24,21 +24,22 @@ import Time
 
 
 type alias TaskId =
-    Uuid
+    String
 
 
 type alias Task =
     { text : String
     , project : Maybe String
-    , id : TaskId
     , createdAt : Time.Posix
     , doneAt : Maybe Time.Posix
+    , id : TaskId
     }
 
 
 type alias Model =
     { text : String
-    , tasks : List Task
+    , tasks : Dict String Task
+    , filteredTasks : List Task
     , projects : List String
     , project : Maybe String
     , seed : Pcg.Seed
@@ -60,7 +61,7 @@ type Msg
     | SubmitInput
     | Tabfill
     | AddTask String (Maybe String) Time.Posix
-    | RemoveTask Uuid
+    | RemoveTask TaskId
     | UpdateTask TaskId (Task -> Task)
       -- TODO: Maybe this should be generalized to something like SendCmd?
     | MarkDone TaskId
@@ -78,7 +79,8 @@ type Msg
 emptyModel : Model
 emptyModel =
     { text = ""
-    , tasks = []
+    , tasks = Dict.empty
+    , filteredTasks = []
     , projects = []
     , seed = Pcg.initialSeed 0 []
     , style = Tasks.Style.darkStyle
@@ -121,19 +123,23 @@ filterTasks filter tasks =
         |> List.filter (\t -> Maybe.isJust t.doneAt == filter.done)
 
 
-countTasks : List Task -> String -> Int
+countTasks : Dict k Task -> String -> Int
 countTasks tasks p =
-    tasks |> filterTasksByProject (Just p) |> List.length
+    tasks
+        |> Dict.toList
+        |> List.map Tuple.second
+        |> filterTasksByProject (Just p)
+        |> List.length
 
 
-findTask : Model -> Uuid -> Maybe Task
+findTask : Model -> TaskId -> Maybe Task
 findTask model id =
-    List.find (\x -> x.id == id) model.tasks
+    Dict.get id model.tasks
 
 
-updateTask : (Task -> Task) -> Model -> Uuid -> List Task
-updateTask f model id =
-    List.updateIf (\x -> x.id == id) f model.tasks
+updateTask : (Task -> Task) -> TaskId -> Model -> Model
+updateTask f id model =
+    { model | tasks = Dict.update id (Maybe.map f) model.tasks }
 
 
 findCommonPrefix : List String -> Maybe String

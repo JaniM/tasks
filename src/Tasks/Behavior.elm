@@ -1,14 +1,15 @@
 module Tasks.Behavior exposing (update)
 
 import Browser.Dom
+import Dict
 import List.Extra as List
 import Maybe.Extra as Maybe
-import Prng.Uuid exposing (Uuid)
+import Prng.Uuid
 import Random.Pcg.Extended as Pcg
 import Task
 import Tasks.Input exposing (parseInput, projectPrefix)
 import Tasks.Interop as Interop
-import Tasks.Model as Model exposing (Model, Msg(..), Task, TaskId, ViewState(..))
+import Tasks.Model as Model exposing (Model, Msg(..), Task, TaskId, ViewState(..), filterTasks)
 import Tasks.Style exposing (darkStyle, lightStyle)
 import Tasks.Utils exposing (choose)
 import Time
@@ -19,21 +20,25 @@ addTaskToModel text project time model =
     let
         ( uuid, seed ) =
             Pcg.step Prng.Uuid.generator model.seed
+
+        id =
+            Prng.Uuid.toString uuid
     in
     { model
         | text = ""
         , seed = seed
-        , tasks = Task text project uuid time Nothing :: model.tasks
+        , tasks = Dict.insert id (Task text project time Nothing id) model.tasks
     }
 
 
 editTaskInModel : Task -> String -> Model -> Model
 editTaskInModel task text model =
-    { model
-        | tasks = Model.updateTask (\t -> { t | text = text }) model task.id
-        , viewState = Model.None
-        , text = ""
-    }
+    Model.updateTask (\t -> { t | text = text })
+        task.id
+        { model
+            | viewState = Model.None
+            , text = ""
+        }
 
 
 switchProject : String -> Model -> Model
@@ -137,9 +142,9 @@ setText s model =
     { model | text = s }
 
 
-removeTask : Uuid -> Model -> Model
+removeTask : TaskId -> Model -> Model
 removeTask id model =
-    { model | tasks = List.filter (\t -> t.id /= id) model.tasks }
+    { model | tasks = Dict.remove id model.tasks }
 
 
 toggleStyle : Model -> Model
@@ -220,7 +225,7 @@ markDone id =
 
 handleUpdateTask : TaskId -> (Task -> Task) -> Model -> Model
 handleUpdateTask id f model =
-    { model | tasks = Model.updateTask f model id }
+    Model.updateTask f id model
 
 
 focusInput : Cmd Msg
@@ -327,6 +332,41 @@ handleEditState updater msg model =
             updater msg model
 
 
+filterTasksAfterUpdate : Update -> Update
+filterTasksAfterUpdate updater msg model =
+    let
+        comp m =
+            ( m.tasks, m.project, done m.viewState )
+
+        ( newModel, cmds ) =
+            updater msg model
+
+        done v =
+            case v of
+                Selected _ x ->
+                    done x
+
+                ShowDone ->
+                    True
+
+                _ ->
+                    False
+
+        withFilters =
+            if comp model /= comp newModel then
+                Dict.toList newModel.tasks
+                    |> List.map Tuple.second
+                    |> filterTasks { project = newModel.project, done = done newModel.viewState }
+                    |> List.sortBy (\t -> -(Time.posixToMillis t.createdAt))
+
+            else
+                newModel.filteredTasks
+    in
+    ( { newModel | filteredTasks = withFilters }
+    , cmds
+    )
+
+
 disableIf : (Msg -> Bool) -> (Update -> Update) -> Update -> Update
 disableIf pred mw f msg =
     if pred msg then
@@ -340,4 +380,5 @@ update : Update
 update =
     handleMsg
         |> handleEditState
+        |> filterTasksAfterUpdate
         |> disableIf Model.isLoadModel saveChangedTasks
