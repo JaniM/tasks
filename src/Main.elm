@@ -428,18 +428,9 @@ viewDoneTasksTimeline zone style project viewState tasks =
         groups =
             filterTasks { project = project, done = True } tasks
                 |> List.sortBy (\t -> -(Maybe.unwrap 0 Time.posixToMillis t.doneAt))
-                |> List.groupWhile
-                    (\a b ->
-                        Maybe.map2 (equalDate zone) a.doneAt b.doneAt
-                            |> Maybe.unwrap False identity
-                    )
-                |> List.map
-                    (\( key, group ) ->
-                        ( key.doneAt
-                            |> Maybe.unwrap (Time.millisToPosix 0) identity
-                        , key :: group
-                        )
-                    )
+                |> groupByKey
+                    (\t -> Maybe.unwrap epoch identity t.doneAt)
+                    (equalDate zone)
     in
     Element.Keyed.column
         [ width fill
