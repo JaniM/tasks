@@ -20,10 +20,10 @@ import Maybe.Extra as Maybe
 import Random.Pcg.Extended as Pcg
 import Task
 import Tasks.Behavior
-import Tasks.Input exposing (..)
+import Tasks.Input
 import Tasks.Interop as Interop
-import Tasks.Model exposing (..)
-import Tasks.Style exposing (..)
+import Tasks.Model as Model exposing (Model, Msg(..), Task, ViewState(..), emptyModel)
+import Tasks.Style exposing (Style)
 import Tasks.Utils exposing (..)
 import Time
 import Time.Format
@@ -42,14 +42,7 @@ main =
 
 init : ( Int, List Int ) -> ( Model, Cmd Msg )
 init ( seed, seedExtension ) =
-    let
-        empty =
-            Tasks.Model.emptyModel
-
-        start =
-            { empty | seed = Pcg.initialSeed seed seedExtension }
-    in
-    ( start
+    ( { emptyModel | seed = Pcg.initialSeed seed seedExtension }
     , Cmd.batch
         [ Interop.load
         , Task.perform SetTimeZone Time.here
@@ -60,25 +53,23 @@ init ( seed, seedExtension ) =
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     let
-        interop =
-            Interop.subscribe <|
-                \fromJs ->
-                    case fromJs of
-                        Interop.Error _ ->
-                            NoOp
+        interopHandler fromJs =
+            case fromJs of
+                Interop.Error _ ->
+                    NoOp
 
-                        Interop.LoadModel m ->
-                            LoadModel m
-
-        keypress =
-            Browser.Events.onKeyPress (D.succeed FocusInput)
+                Interop.LoadModel m ->
+                    LoadModel m
     in
-    Sub.batch [ interop, keypress ]
+    Sub.batch
+        [ Interop.subscribe interopHandler
+        , Browser.Events.onKeyPress (D.succeed FocusInput)
+        ]
 
 
 projectSearch : Model -> Maybe String
 projectSearch model =
-    case parseInput model.text of
+    case Tasks.Input.parseInput model.text of
         Ok (Tasks.Input.Project text) ->
             Just text
 
@@ -158,26 +149,24 @@ showDoneButton style current =
 contentRow : Model -> Element Msg
 contentRow model =
     let
-        listing =
-            case projectSearch model of
-                Just text ->
+        listing () =
+            case ( projectSearch model, model.filteredTasks, model.project ) of
+                ( Just text, _, _ ) ->
                     viewProjectSearch model text
 
-                Nothing ->
-                    case ( model.filteredTasks, model.project ) of
-                        ( [], Just p ) ->
-                            viewEmptyProject model.style p
+                ( Nothing, [], Just p ) ->
+                    viewEmptyProject model.style p
 
-                        ( filteredTasks, _ ) ->
-                            Element.Lazy.lazy3 viewTasks model.style model.viewState filteredTasks
+                ( Nothing, filteredTasks, _ ) ->
+                    Element.Lazy.lazy3 viewTasks model.style model.viewState filteredTasks
 
         pane state =
             case state of
-                None ->
-                    listing
-
                 Selected _ s ->
                     pane s
+
+                None ->
+                    listing ()
 
                 Edit task ->
                     viewTaskEdit model task
@@ -221,7 +210,7 @@ projectCard model project =
         , onClick (SetProject False project)
         ]
         [ paragraph [ width fill ] [ text project ]
-        , text (String.fromInt (countTasks model.tasks project))
+        , text (String.fromInt (Model.countTasks model.tasks project))
         ]
 
 
@@ -261,7 +250,7 @@ viewProjectSearch { style, projects } prefix =
                 (paragraph [] [ text project ])
 
         suggestions =
-            findProjectsMatchingSearch prefix projects
+            Model.findProjectsMatchingSearch prefix projects
                 |> List.map card
                 |> column [ spacing (paddingScale 1), height fill ]
 
@@ -330,8 +319,8 @@ viewTasks style viewState tasks =
         (List.map task_ tasks)
 
 
-viewTask : Style -> Bool -> Task -> Element Msg
-viewTask style selected task =
+taskDropdown : Style -> Task -> Element Msg
+taskDropdown style task =
     let
         button =
             Input.button
@@ -362,16 +351,22 @@ viewTask style selected task =
                 { onPress = Nothing
                 , label = text "Edit"
                 }
+    in
+    row
+        [ Background.color style.taskBackground
+        , Element.Border.width 1
+        , padding (paddingScale 2)
+        , spacing (paddingScale 2)
+        ]
+        [ done, edit, remove ]
 
+
+viewTask : Style -> Bool -> Task -> Element Msg
+viewTask style selected task =
+    let
         dropdown =
             if selected then
-                row
-                    [ Background.color style.taskBackground
-                    , Element.Border.width 1
-                    , padding (paddingScale 2)
-                    , spacing (paddingScale 2)
-                    ]
-                    [ done, edit, remove ]
+                taskDropdown style task
 
             else
                 Element.none
