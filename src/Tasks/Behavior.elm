@@ -294,23 +294,29 @@ handleMsg msg =
             noCmd identity
 
 
-saveChangedTasks : Update -> Update
-saveChangedTasks updater msg model =
+executeIfChanged : (Model -> key) -> (Model -> ( Model, Cmd Msg )) -> Update -> Update
+executeIfChanged comp mw updater msg model =
     let
-        comp m =
-            ( m.tasks, m.projects )
-
         ( newModel, cmds ) =
             updater msg model
 
-        saveCmd =
+        ( endModel, newCmds ) =
             if comp model /= comp newModel then
-                Interop.save newModel
+                mw newModel
 
             else
-                Cmd.none
+                ( newModel, Cmd.none )
     in
-    ( newModel, Cmd.batch [ saveCmd, cmds ] )
+    ( endModel, Cmd.batch [ cmds, newCmds ] )
+
+
+disableIf : (Msg -> Bool) -> (Update -> Update) -> Update -> Update
+disableIf pred mw f msg =
+    if pred msg then
+        f msg
+
+    else
+        mw f msg
 
 
 handleEditState : Update -> Update
@@ -332,48 +338,31 @@ handleEditState updater msg model =
             updater msg model
 
 
+updateFilteredTasks : Model -> Model
+updateFilteredTasks model =
+    { model
+        | filteredTasks =
+            Dict.toList model.tasks
+                |> List.map Tuple.second
+                |> filterTasks
+                    { project = model.project
+                    , done = Model.showDoneTasks model.viewState
+                    }
+                |> List.sortBy (\t -> -(Time.posixToMillis t.createdAt))
+    }
+
+
 filterTasksAfterUpdate : Update -> Update
-filterTasksAfterUpdate updater msg model =
-    let
-        comp m =
-            ( m.tasks, m.project, done m.viewState )
-
-        ( newModel, cmds ) =
-            updater msg model
-
-        done v =
-            case v of
-                Selected _ x ->
-                    done x
-
-                ShowDone ->
-                    True
-
-                _ ->
-                    False
-
-        withFilters =
-            if comp model /= comp newModel then
-                Dict.toList newModel.tasks
-                    |> List.map Tuple.second
-                    |> filterTasks { project = newModel.project, done = done newModel.viewState }
-                    |> List.sortBy (\t -> -(Time.posixToMillis t.createdAt))
-
-            else
-                newModel.filteredTasks
-    in
-    ( { newModel | filteredTasks = withFilters }
-    , cmds
-    )
+filterTasksAfterUpdate =
+    executeIfChanged
+        (\m -> ( m.tasks, m.project, Model.showDoneTasks m.viewState ))
+        (noCmd updateFilteredTasks)
 
 
-disableIf : (Msg -> Bool) -> (Update -> Update) -> Update -> Update
-disableIf pred mw f msg =
-    if pred msg then
-        f msg
-
-    else
-        mw f msg
+saveChangedTasks : Update -> Update
+saveChangedTasks =
+    executeIfChanged (\m -> ( m.tasks, m.projects )) (onlyCmd Interop.save)
+        |> disableIf Model.isLoadModel
 
 
 update : Update
@@ -381,4 +370,4 @@ update =
     handleMsg
         |> handleEditState
         |> filterTasksAfterUpdate
-        |> disableIf Model.isLoadModel saveChangedTasks
+        |> saveChangedTasks

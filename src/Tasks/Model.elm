@@ -12,6 +12,7 @@ module Tasks.Model exposing
     , findTask
     , isLoadModel
     , updateTask
+    , showDoneTasks
     )
 
 import Dict exposing (Dict)
@@ -163,3 +164,16 @@ findProjectsMatchingSearch search projects =
             String.toLower x |> String.startsWith lowerSearch
     in
     List.filter pred projects
+
+
+showDoneTasks : ViewState -> Bool
+showDoneTasks v =
+    case v of
+        Selected _ x ->
+            showDoneTasks x
+
+        ShowDone ->
+            True
+
+        _ ->
+            False
