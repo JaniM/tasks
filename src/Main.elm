@@ -67,16 +67,6 @@ subscriptions _ =
         ]
 
 
-projectSearch : Model -> Maybe String
-projectSearch model =
-    case Tasks.Input.parseInput model.text of
-        Ok (Tasks.Input.Project text) ->
-            Just text
-
-        _ ->
-            Nothing
-
-
 paddingScale : Int -> Int
 paddingScale n =
     5 * n
@@ -150,14 +140,14 @@ contentRow : Model -> Element Msg
 contentRow model =
     let
         listing () =
-            case ( projectSearch model, model.filteredTasks, model.project ) of
-                ( Just text, _, _ ) ->
+            case ( Tasks.Input.parseInput model.text, model.filteredTasks, model.project ) of
+                ( Ok (Tasks.Input.Project text), _, _ ) ->
                     viewProjectSearch model text
 
-                ( Nothing, [], Just p ) ->
+                ( _, [], Just p ) ->
                     viewEmptyProject model.style p
 
-                ( Nothing, filteredTasks, _ ) ->
+                ( _, filteredTasks, _ ) ->
                     Element.Lazy.lazy3 viewTasks model.style model.viewState filteredTasks
 
         pane state =
@@ -210,7 +200,9 @@ projectCard model project =
         , onClick (SetProject False project)
         ]
         [ paragraph [ width fill ] [ text project ]
-        , text (String.fromInt (Model.countTasks model.tasks project))
+        , Model.countTasks model.tasks { project = Just project, done = False, search = Nothing }
+            |> String.fromInt
+            |> text
         ]
 
 
@@ -222,12 +214,33 @@ noFocusStyle =
 
 viewTaskInput : Model -> Element Msg
 viewTaskInput model =
+    let
+        tagline tags =
+            wrappedRow [ width fill, padding (paddingScale 2), spacing (paddingScale 2) ]
+                (List.map text tags)
+
+        suggestions =
+            case model.tagSuggestions of
+                Just [ tag ] ->
+                    if String.contains tag model.text then
+                        Element.none
+
+                    else
+                        tagline [ tag ]
+
+                Just tags ->
+                    tagline tags
+
+                Nothing ->
+                    Element.none
+    in
     el [ width fill, padding (paddingScale 2) ] <|
         Input.text
             [ onKeys [ ( "Enter", SubmitInput ), ( "Tab", Tabfill ) ]
             , Background.color model.style.taskBackground
             , Input.focusedOnLoad
             , Html.Attributes.id "input" |> htmlAttribute
+            , below suggestions
             ]
             { onChange = SetText
             , text = model.text
@@ -380,16 +393,21 @@ viewTask style selected task =
 
             else
                 style.taskBackground
+
+        tags =
+            row [ spacing (paddingScale 1) ]
+                (List.map text task.tags)
     in
     row
         [ width fill
         , padding (paddingScale 1)
         , Background.color color
-        , spacing (paddingScale 1)
+        , spacing (paddingScale 2)
         , below dropdown
         , onClickNoPropagate (SelectTask task.id)
         ]
         [ paragraph [ width fill ] [ text task.text ]
+        , tags
         , text (Maybe.withDefault "No project" task.project)
         ]
 
@@ -437,7 +455,9 @@ viewDoneTasksTimeline zone style viewState tasks =
 
 equalDate : Time.Zone -> Time.Posix -> Time.Posix -> Bool
 equalDate z a b =
-    Time.toDay z a == Time.toDay z b && Time.toMonth z a == Time.toMonth z b && Time.toYear z a == Time.toYear z b
+    (Time.toDay z a == Time.toDay z b)
+        && (Time.toMonth z a == Time.toMonth z b)
+        && (Time.toYear z a == Time.toYear z b)
 
 
 onKeys : List ( String, msg ) -> Attribute msg

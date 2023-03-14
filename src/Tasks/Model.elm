@@ -1,6 +1,7 @@
 module Tasks.Model exposing
     ( Model
     , Msg(..)
+    , Tag
     , Task
     , TaskId
     , ViewState(..)
@@ -11,15 +12,15 @@ module Tasks.Model exposing
     , findProjectsMatchingSearch
     , findTask
     , isLoadModel
-    , updateTask
     , showDoneTasks
+    , updateTask
     )
 
 import Dict exposing (Dict)
 import List.Extra as List
 import Maybe.Extra as Maybe
 import Random.Pcg.Extended as Pcg
-import Tasks.Input exposing (InputDesc(..))
+import Set exposing (Set)
 import Tasks.Style exposing (Style)
 import Time
 
@@ -28,8 +29,13 @@ type alias TaskId =
     String
 
 
+type alias Tag =
+    String
+
+
 type alias Task =
     { text : String
+    , tags : List Tag
     , project : Maybe String
     , createdAt : Time.Posix
     , doneAt : Maybe Time.Posix
@@ -42,11 +48,14 @@ type alias Model =
     , tasks : Dict String Task
     , filteredTasks : List Task
     , projects : List String
+    , tags : Set String
     , project : Maybe String
     , seed : Pcg.Seed
     , style : Style
     , viewState : ViewState
     , timeZone : Time.Zone
+    , search : Maybe ( String, List Tag )
+    , tagSuggestions : Maybe (List String)
     }
 
 
@@ -61,7 +70,7 @@ type Msg
     = SetText String
     | SubmitInput
     | Tabfill
-    | AddTask String (Maybe String) Time.Posix
+    | AddTask String (List Tag) (Maybe String) Time.Posix
     | RemoveTask TaskId
     | UpdateTask TaskId (Task -> Task)
       -- TODO: Maybe this should be generalized to something like SendCmd?
@@ -83,11 +92,14 @@ emptyModel =
     , tasks = Dict.empty
     , filteredTasks = []
     , projects = []
+    , tags = Set.empty
     , seed = Pcg.initialSeed 0 []
     , style = Tasks.Style.darkStyle
     , project = Nothing
     , viewState = None
     , timeZone = Time.utc
+    , search = Nothing
+    , tagSuggestions = Nothing
     }
 
 
@@ -111,9 +123,26 @@ filterTasksByProject project tasks =
             tasks
 
 
+filterTasksBySearch : Maybe ( String, List Tag ) -> List Task -> List Task
+filterTasksBySearch search tasks =
+    case search of
+        Just ( searchString, tags ) ->
+            let
+                lowerSearch =
+                    String.toLower searchString
+            in
+            tasks
+                |> List.filter (\task -> List.isEmpty tags || List.any (\tag -> List.member tag tags) task.tags)
+                |> List.filter (\task -> String.contains lowerSearch (String.toLower task.text))
+
+        Nothing ->
+            tasks
+
+
 type alias Filter =
     { project : Maybe String
     , done : Bool
+    , search : Maybe ( String, List Tag )
     }
 
 
@@ -122,14 +151,15 @@ filterTasks filter tasks =
     tasks
         |> filterTasksByProject filter.project
         |> List.filter (\t -> Maybe.isJust t.doneAt == filter.done)
+        |> filterTasksBySearch filter.search
 
 
-countTasks : Dict k Task -> String -> Int
-countTasks tasks p =
+countTasks : Dict k Task -> Filter -> Int
+countTasks tasks filter =
     tasks
         |> Dict.toList
         |> List.map Tuple.second
-        |> filterTasksByProject (Just p)
+        |> filterTasks filter
         |> List.length
 
 
@@ -160,8 +190,8 @@ findProjectsMatchingSearch search projects =
         lowerSearch =
             String.toLower search
 
-        pred x =
-            String.toLower x |> String.startsWith lowerSearch
+        pred =
+            String.toLower >> String.startsWith lowerSearch
     in
     List.filter pred projects
 

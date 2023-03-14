@@ -7,17 +7,18 @@ import List.Extra as List
 import Maybe.Extra as Maybe
 import Prng.Uuid
 import Random.Pcg.Extended as Pcg
+import Set exposing (Set)
 import Task
-import Tasks.Input exposing (parseInput, projectPrefix)
+import Tasks.Input exposing (parseInput, projectPrefix, searchPrefix)
 import Tasks.Interop as Interop
-import Tasks.Model as Model exposing (Model, Msg(..), Task, TaskId, ViewState(..), filterTasks)
+import Tasks.Model as Model exposing (Model, Msg(..), Tag, Task, TaskId, ViewState(..), filterTasks)
 import Tasks.Style exposing (darkStyle, lightStyle)
 import Tasks.Utils exposing (choose)
 import Time
 
 
-addTaskToModel : String -> Maybe String -> Time.Posix -> Model -> Model
-addTaskToModel text project time model =
+addTaskToModel : String -> List Tag -> Maybe String -> Time.Posix -> Model -> Model
+addTaskToModel text tags project time model =
     let
         ( uuid, seed ) =
             Pcg.step Prng.Uuid.generator model.seed
@@ -28,7 +29,7 @@ addTaskToModel text project time model =
     { model
         | text = ""
         , seed = seed
-        , tasks = Dict.insert id (Task text project time Nothing id) model.tasks
+        , tasks = Dict.insert id (Task text tags project time Nothing id) model.tasks
     }
 
 
@@ -74,11 +75,6 @@ tryLog f val =
             ( val, Interop.log e )
 
 
-noCmd : (a -> a) -> a -> ( a, Cmd msg )
-noCmd f x =
-    ( f x, Cmd.none )
-
-
 onlyCmd : (model -> Cmd msg) -> model -> ( model, Cmd msg )
 onlyCmd f x =
     ( x, f x )
@@ -97,19 +93,25 @@ nothingIfUnchanged new old =
 -- MESSAGE HANDLERS
 
 
-addTask : String -> Maybe String -> Cmd Msg
-addTask text project =
-    Task.perform (AddTask text project) Time.now
+addTask : String -> List Tag -> Maybe String -> Cmd Msg
+addTask text tags project =
+    Task.perform (AddTask text tags project) Time.now
 
 
 handleMainInput : Model -> ( Model, Cmd Msg )
 handleMainInput model =
     case parseInput model.text of
-        Ok (Tasks.Input.Text text) ->
-            ( model, addTask text model.project )
+        Ok (Tasks.Input.Text text tags) ->
+            ( { model | search = Nothing }
+            , addTask text tags model.project
+            )
 
         Ok (Tasks.Input.Project project) ->
             ( switchProject project model, Cmd.none )
+
+        Ok (Tasks.Input.Search searchString tags) ->
+            { model | search = Just ( searchString, tags ) }
+                |> Cmd.withNoCmd
 
         Err _ ->
             ( model, Interop.log "Parsing failed" )
@@ -118,9 +120,12 @@ handleMainInput model =
 tabfill : Model -> Result String Model
 tabfill model =
     case parseInput model.text of
-        Ok (Tasks.Input.Text text) ->
+        Ok (Tasks.Input.Text text _) ->
             if String.startsWith text projectPrefix then
                 Ok { model | text = projectPrefix }
+
+            else if String.startsWith text searchPrefix then
+                Ok { model | text = searchPrefix }
 
             else
                 Ok model
@@ -134,13 +139,82 @@ tabfill model =
             in
             Ok { model | text = projectPrefix ++ prefix }
 
+        Ok (Tasks.Input.Search search tags) ->
+            let
+                tagMatching =
+                    List.last tags
+                        |> Maybe.andThen
+                            (\tag ->
+                                model.tags
+                                    |> Set.filter (String.startsWith tag)
+                                    |> setOfOne
+                            )
+
+                init =
+                    tags |> List.init |> Maybe.unwrap [] identity
+
+                newText =
+                    case tagMatching of
+                        Just newTag ->
+                            searchPrefix
+                                ++ search
+                                ++ " "
+                                ++ String.join " " init
+                                ++ " "
+                                ++ newTag
+
+                        Nothing ->
+                            model.text
+            in
+            Ok (setText newText model)
+
         Err _ ->
             Err "Parsing failed"
 
 
+setOfOne : Set k -> Maybe k
+setOfOne set =
+    if Set.size set == 1 then
+        Set.toList set |> List.head
+
+    else
+        Nothing
+
+
 setText : String -> Model -> Model
 setText s model =
-    { model | text = s }
+    let
+        tagMatching tags =
+            List.last tags
+                |> Maybe.map
+                    (\tag ->
+                        model.tags
+                            |> Set.filter (String.startsWith tag)
+                            |> Set.toList
+                            |> List.sort
+                    )
+    in
+    case parseInput s of
+        Ok (Tasks.Input.Search search tags) ->
+            { model
+                | text = s
+                , search = Just ( search, tags )
+                , tagSuggestions = tagMatching tags
+            }
+
+        Ok (Tasks.Input.Text _ tags) ->
+            { model
+                | text = s
+                , search = Nothing
+                , tagSuggestions = tagMatching tags
+            }
+
+        _ ->
+            { model
+                | text = s
+                , search = Nothing
+                , tagSuggestions = Nothing
+            }
 
 
 removeTask : TaskId -> Model -> Model
@@ -247,7 +321,7 @@ handleMsg : Update
 handleMsg msg =
     case msg of
         SetText s ->
-            noCmd <| setText s
+            Cmd.withNoCmd << setText s
 
         SubmitInput ->
             handleMainInput
@@ -256,43 +330,43 @@ handleMsg msg =
             tryLog tabfill
 
         RemoveTask id ->
-            noCmd <| removeTask id
+            Cmd.withNoCmd << removeTask id
 
         ToggleStyle ->
-            noCmd <| toggleStyle
+            Cmd.withNoCmd << toggleStyle
 
         SetProject clearText target ->
-            noCmd <| setProject clearText target
+            Cmd.withNoCmd << setProject clearText target
 
         DeleteProject target ->
-            noCmd <| deleteProject target
+            Cmd.withNoCmd << deleteProject target
 
         LoadModel m ->
-            noCmd <| loadModel m
+            Cmd.withNoCmd << loadModel m
 
         SetViewState state ->
-            noCmd <| setViewState state
+            Cmd.withNoCmd << setViewState state
 
         SelectTask id ->
-            noCmd <| selectTask id
+            Cmd.withNoCmd << selectTask id
 
         FocusInput ->
             onlyCmd <| always focusInput
 
-        AddTask text project time ->
-            noCmd <| addTaskToModel text project time
+        AddTask text tags project time ->
+            Cmd.withNoCmd << addTaskToModel text tags project time
 
         MarkDone taskId ->
             onlyCmd <| always <| markDone taskId
 
         UpdateTask taskId f ->
-            noCmd <| handleUpdateTask taskId f
+            Cmd.withNoCmd << handleUpdateTask taskId f
 
         SetTimeZone zone ->
-            noCmd <| setTimeZone zone
+            Cmd.withNoCmd << setTimeZone zone
 
         NoOp ->
-            noCmd identity
+            Cmd.withNoCmd
 
 
 executeIfChanged : (Model -> key) -> (Model -> ( Model, Cmd Msg )) -> Update -> Update
@@ -341,10 +415,17 @@ updateFilteredTasks model =
                     sortRule x
 
                 ShowDone ->
-                    \t -> -(Maybe.unwrap 0 Time.posixToMillis t.doneAt)
+                    negate << Maybe.unwrap 0 Time.posixToMillis << .doneAt
 
                 _ ->
-                    \t -> -(Time.posixToMillis t.createdAt)
+                    negate << Time.posixToMillis << .createdAt
+
+        -- TODO: This is a temporary hack.
+        tags =
+            Dict.toList model.tasks
+                |> List.map Tuple.second
+                |> List.concatMap .tags
+                |> Set.fromList
     in
     { model
         | filteredTasks =
@@ -353,16 +434,18 @@ updateFilteredTasks model =
                 |> filterTasks
                     { project = model.project
                     , done = Model.showDoneTasks model.viewState
+                    , search = model.search
                     }
                 |> List.sortBy (sortRule model.viewState)
+        , tags = tags
     }
 
 
 filterTasksAfterUpdate : Update -> Update
 filterTasksAfterUpdate =
     executeIfChanged
-        (\m -> ( m.tasks, m.project, Model.showDoneTasks m.viewState ))
-        (noCmd updateFilteredTasks)
+        (\m -> ( m.tasks, m.project, ( Model.showDoneTasks m.viewState, m.search ) ))
+        (Cmd.withNoCmd << updateFilteredTasks)
 
 
 saveChangedTasks : Update -> Update

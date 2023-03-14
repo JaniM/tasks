@@ -5,9 +5,9 @@ import Json.Decode as D
 import Json.Decode.Extra as D
 import Json.Encode as E
 import Json.Encode.Extra as E
+import Maybe.Extra
 import Result.Extra as Result
 import Tasks.Model exposing (Model, Task, TaskId, emptyModel)
-import Tasks.Utils exposing (fmap)
 import Time
 
 
@@ -32,7 +32,7 @@ type FromJs
 
 save : Model -> Cmd msg
 save =
-    fmap performRequest Save
+    performRequest << Save
 
 
 load : Cmd msg
@@ -42,16 +42,15 @@ load =
 
 performRequest : ToJs -> Cmd msg
 performRequest =
-    fmap requestJs encodeRequest
+    requestJs << encodeRequest
 
 
 subscribe : (FromJs -> msg) -> Sub msg
-subscribe msg =
-    fromJs <|
-        \x ->
-            D.decodeValue responseDecoder x
-                |> Result.unpack Error identity
-                |> msg
+subscribe createMsg =
+    D.decodeValue responseDecoder
+        >> Result.unpack Error identity
+        >> createMsg
+        |> fromJs
 
 
 encodeRequest : ToJs -> E.Value
@@ -86,6 +85,7 @@ encodeModel model =
         task t =
             E.object
                 [ ( "text", E.string t.text )
+                , ( "tags", E.list E.string t.tags )
                 , ( "project", E.maybe E.string t.project )
                 , ( "createdAt", encodeTime t.createdAt )
                 , ( "doneAt", E.maybe encodeTime t.doneAt )
@@ -102,8 +102,9 @@ decodeModel =
     let
         task : D.Decoder (TaskId -> Task)
         task =
-            D.map4 Task
+            D.map5 Task
                 (D.field "text" D.string)
+                (D.field "tags" (D.list D.string))
                 (D.field "project" (D.maybe D.string))
                 (D.field "createdAt" decodeTime)
                 (D.field "doneAt" (D.maybe decodeTime))
@@ -112,9 +113,7 @@ decodeModel =
             { emptyModel | tasks = tasks, projects = projects }
     in
     D.map2 model
-        (D.field "tasks" (D.dict task)
-            |> D.map (Dict.map (\k v -> v k))
-        )
+        (D.field "tasks" (D.dict task) |> D.map (Dict.map (|>)))
         (D.field "projects" (D.list D.string))
 
 
@@ -124,5 +123,5 @@ decodeTime =
 
 
 encodeTime : Time.Posix -> E.Value
-encodeTime time =
-    E.int <| Time.posixToMillis time
+encodeTime =
+    E.int << Time.posixToMillis
