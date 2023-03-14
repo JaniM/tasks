@@ -65,7 +65,7 @@ multipleTags =
     let
         step tags =
             oneOf
-                [ succeed (\t -> Loop (t :: tags))
+                [ succeed (\t -> Loop (tags ++ [t]))
                     |= tag
                 , succeed (choose (Done tags) (Loop tags) << String.isEmpty)
                     |= getChompedString spaces

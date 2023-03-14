@@ -159,9 +159,8 @@ tabfill model =
                             searchPrefix
                                 ++ search
                                 ++ " "
-                                ++ String.join " " init
+                                ++ String.join " " (init ++ [ newTag ])
                                 ++ " "
-                                ++ newTag
 
                         Nothing ->
                             model.text

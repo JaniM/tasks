@@ -222,7 +222,8 @@ viewTaskInput model =
         suggestions =
             case model.tagSuggestions of
                 Just [ tag ] ->
-                    if String.contains tag model.text then
+                    -- TODO: this is a hack
+                    if String.contains (" " ++ tag) model.text then
                         Element.none
 
                     else
