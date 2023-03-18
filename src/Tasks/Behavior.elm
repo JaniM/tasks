@@ -109,18 +109,47 @@ handleMainInput model =
         Ok (Tasks.Input.Project project) ->
             ( switchProject project model, Cmd.none )
 
-        Ok (Tasks.Input.Search searchString tags) ->
-            { model | search = Just ( searchString, tags ) }
+        Ok (Tasks.Input.Search rules) ->
+            { model | search = Just rules }
                 |> Cmd.withNoCmd
 
         Err _ ->
             ( model, Interop.log "Parsing failed" )
 
 
+{-| Complete the last tag in the current query.
+Depenss on Model.tagSuggestions to be calculated properly.
+`tags` should be the list of tags currently in the query.
+Note: currently we reorder tags to appear after other content.
+-}
+tabfillTag : Model -> List String -> String -> Model
+tabfillTag model tags textBeforeTags =
+    let
+        tagMatching =
+            model.tagSuggestions
+                |> Maybe.andThen listOfOne
+
+        init =
+            tags |> List.init |> Maybe.unwrap [] identity
+
+        newText =
+            case tagMatching of
+                Just newTag ->
+                    textBeforeTags
+                        ++ " "
+                        ++ String.join " " (init ++ [ newTag ])
+                        ++ " "
+
+                Nothing ->
+                    model.text
+    in
+    setText newText model
+
+
 tabfill : Model -> Result String Model
 tabfill model =
     case parseInput model.text of
-        Ok (Tasks.Input.Text text _) ->
+        Ok (Tasks.Input.Text text tags) ->
             if String.startsWith text projectPrefix then
                 Ok { model | text = projectPrefix }
 
@@ -128,7 +157,7 @@ tabfill model =
                 Ok { model | text = searchPrefix }
 
             else
-                Ok model
+                Ok (tabfillTag model tags text)
 
         Ok (Tasks.Input.Project text) ->
             let
@@ -139,33 +168,13 @@ tabfill model =
             in
             Ok { model | text = projectPrefix ++ prefix }
 
-        Ok (Tasks.Input.Search search tags) ->
-            let
-                tagMatching =
-                    List.last tags
-                        |> Maybe.andThen
-                            (\tag ->
-                                model.tags
-                                    |> Set.filter (String.startsWith tag)
-                                    |> setOfOne
-                            )
-
-                init =
-                    tags |> List.init |> Maybe.unwrap [] identity
-
-                newText =
-                    case tagMatching of
-                        Just newTag ->
-                            searchPrefix
-                                ++ search
-                                ++ " "
-                                ++ String.join " " (init ++ [ newTag ])
-                                ++ " "
-
-                        Nothing ->
-                            model.text
-            in
-            Ok (setText newText model)
+        Ok (Tasks.Input.Search rule) ->
+            Ok
+                (tabfillTag
+                    model
+                    rule.tags
+                    (searchPrefix ++ String.join " " rule.snippets)
+                )
 
         Err _ ->
             Err "Parsing failed"
@@ -178,6 +187,16 @@ setOfOne set =
 
     else
         Nothing
+
+
+listOfOne : List k -> Maybe k
+listOfOne list =
+    case list of
+        [ x ] ->
+            Just x
+
+        _ ->
+            Nothing
 
 
 setText : String -> Model -> Model
@@ -194,11 +213,11 @@ setText s model =
                     )
     in
     case parseInput s of
-        Ok (Tasks.Input.Search search tags) ->
+        Ok (Tasks.Input.Search rule) ->
             { model
                 | text = s
-                , search = Just ( search, tags )
-                , tagSuggestions = tagMatching tags
+                , search = Just rule
+                , tagSuggestions = tagMatching rule.tags
             }
 
         Ok (Tasks.Input.Text _ tags) ->

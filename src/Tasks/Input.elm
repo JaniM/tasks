@@ -7,14 +7,19 @@ module Tasks.Input exposing
 
 import Parser exposing (..)
 import Set
-import Tasks.Model exposing (Tag)
+import Tasks.Model exposing (SearchRule)
 import Tasks.Utils exposing (choose)
 
 
 type InputDesc
-    = Text String (List Tag)
+    = Text String (List String)
     | Project String
-    | Search String (List Tag)
+    | Search SearchRule
+
+
+type TextPart
+    = TextPart String
+    | TagPart String
 
 
 projectPrefix : String
@@ -34,13 +39,11 @@ parseInput =
             [ succeed Project
                 |. token projectPrefix
                 |= rest
-            , succeed (\s t -> Search (String.trim s) t)
+            , succeed partsToSearch
                 |. token searchPrefix
-                |= (chompWhile (\c -> c /= '#') |> getChompedString)
-                |= multipleTags
-            , succeed Text
-                |= (chompWhile (\c -> c /= '#') |> getChompedString)
-                |= multipleTags
+                |= multipleParts
+            , succeed partsToText
+                |= multipleParts
             ]
 
 
@@ -51,7 +54,7 @@ rest =
         |= getSource
 
 
-tag : Parser Tag
+tag : Parser String
 tag =
     variable
         { start = (==) '#'
@@ -60,15 +63,62 @@ tag =
         }
 
 
-multipleTags : Parser (List Tag)
-multipleTags =
+word : Parser String
+word =
+    variable
+        { start = (/=) ' '
+        , inner = (/=) ' '
+        , reserved = Set.empty
+        }
+
+
+multipleParts : Parser (List TextPart)
+multipleParts =
     let
-        step tags =
+        addPart revParts part =
+            Loop (part :: revParts)
+
+        step revParts =
             oneOf
-                [ succeed (\t -> Loop (tags ++ [t]))
+                [ succeed (addPart revParts << TagPart)
                     |= tag
-                , succeed (choose (Done tags) (Loop tags) << String.isEmpty)
+                , succeed (addPart revParts << TextPart)
+                    |= word
+                , succeed (choose (Done revParts) (Loop revParts) << String.isEmpty)
                     |= getChompedString spaces
                 ]
     in
     loop [] step
+
+
+partsToText : List TextPart -> InputDesc
+partsToText =
+    collectParts >> (\{ snippets, tags } -> Text (String.join " " snippets) tags)
+
+
+partsToSearch : List TextPart -> InputDesc
+partsToSearch =
+    collectParts >> Search
+
+
+
+-- SearchRule happens to have the right shape - this doesn't need to last
+
+
+collectParts : List TextPart -> SearchRule
+collectParts =
+    let
+        loop text tags parts =
+            case parts of
+                (TextPart t) :: nparts ->
+                    loop (t :: text) tags nparts
+
+                (TagPart t) :: nparts ->
+                    loop text (t :: tags) nparts
+
+                [] ->
+                    { snippets = text
+                    , tags = tags
+                    }
+    in
+    loop [] []

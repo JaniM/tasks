@@ -1,6 +1,7 @@
 module Tasks.Model exposing
     ( Model
     , Msg(..)
+    , SearchRule
     , Tag
     , Task
     , TaskId
@@ -33,6 +34,12 @@ type alias Tag =
     String
 
 
+type alias SearchRule =
+    { snippets : List String
+    , tags : List String
+    }
+
+
 type alias Task =
     { text : String
     , tags : List Tag
@@ -54,7 +61,7 @@ type alias Model =
     , style : Style
     , viewState : ViewState
     , timeZone : Time.Zone
-    , search : Maybe ( String, List Tag )
+    , search : Maybe SearchRule
     , tagSuggestions : Maybe (List String)
     }
 
@@ -123,17 +130,17 @@ filterTasksByProject project tasks =
             tasks
 
 
-filterTasksBySearch : Maybe ( String, List Tag ) -> List Task -> List Task
+filterTasksBySearch : Maybe SearchRule -> List Task -> List Task
 filterTasksBySearch search tasks =
     case search of
-        Just ( searchString, tags ) ->
+        Just { snippets, tags } ->
             let
-                lowerSearch =
-                    String.toLower searchString
+                lowerSnippets =
+                    List.map String.toLower snippets
             in
             tasks
                 |> List.filter (\task -> List.isEmpty tags || List.any (\tag -> List.member tag tags) task.tags)
-                |> List.filter (\task -> String.contains lowerSearch (String.toLower task.text))
+                |> List.filter (\task -> List.all (\s -> String.contains s (String.toLower task.text)) lowerSnippets)
 
         Nothing ->
             tasks
@@ -142,7 +149,7 @@ filterTasksBySearch search tasks =
 type alias Filter =
     { project : Maybe String
     , done : Bool
-    , search : Maybe ( String, List Tag )
+    , search : Maybe SearchRule
     }
 
 
