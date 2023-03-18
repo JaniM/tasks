@@ -1,13 +1,19 @@
-port module Tasks.Interop exposing (FromJs(..), load, log, save, subscribe)
+port module Tasks.Interop exposing
+    ( FromJs(..)
+    , load
+    , log
+    , save
+    , subscribe
+    )
 
-import Dict
+import Dict exposing (Dict)
 import Json.Decode as D
 import Json.Decode.Extra as D
 import Json.Encode as E
 import Json.Encode.Extra as E
 import Maybe.Extra
 import Result.Extra as Result
-import Tasks.Model exposing (Model, Task, TaskId, emptyModel)
+import Tasks.Model exposing (Model, StoredModel, Task, TaskId)
 import Time
 
 
@@ -20,31 +26,44 @@ port requestJs : E.Value -> Cmd msg
 port fromJs : (D.Value -> msg) -> Sub msg
 
 
+{-| Message to be sent to JS.
+-}
 type ToJs
     = Save Model
     | Load
 
 
+{-| Message that has been received from JS.
+-}
 type FromJs
-    = LoadModel Model
+    = LoadModel StoredModel
     | Error D.Error
 
 
+{-| Request JS to save the model.
+-}
 save : Model -> Cmd msg
 save =
     performRequest << Save
 
 
+{-| Request JS to load the model.
+This doesn't return anything, the data is received as `LoadModel` from `subscribe`.
+-}
 load : Cmd msg
 load =
     performRequest Load
 
 
+{-| Converts the request to JSON and passes it to the host.
+-}
 performRequest : ToJs -> Cmd msg
 performRequest =
     requestJs << encodeRequest
 
 
+{-| Subscribe to messages from the Javascript host.
+-}
 subscribe : (FromJs -> msg) -> Sub msg
 subscribe createMsg =
     D.decodeValue responseDecoder
@@ -57,7 +76,10 @@ encodeRequest : ToJs -> E.Value
 encodeRequest req =
     case req of
         Save model ->
-            E.object [ ( "key", E.string "save" ), ( "data", encodeModel model ) ]
+            E.object
+                [ ( "key", E.string "save" )
+                , ( "data", encodeModel model )
+                ]
 
         Load ->
             E.object [ ( "key", E.string "load" ) ]
@@ -97,7 +119,7 @@ encodeModel model =
         ]
 
 
-decodeModel : D.Decoder Model
+decodeModel : D.Decoder StoredModel
 decodeModel =
     let
         task : D.Decoder (TaskId -> Task)
@@ -108,11 +130,8 @@ decodeModel =
                 (D.field "project" (D.maybe D.string))
                 (D.field "createdAt" decodeTime)
                 (D.field "doneAt" (D.maybe decodeTime))
-
-        model tasks projects =
-            { emptyModel | tasks = tasks, projects = projects }
     in
-    D.map2 model
+    D.map2 StoredModel
         (D.field "tasks" (D.dict task) |> D.map (Dict.map (|>)))
         (D.field "projects" (D.list D.string))
 

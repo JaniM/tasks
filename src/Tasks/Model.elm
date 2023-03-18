@@ -2,6 +2,7 @@ module Tasks.Model exposing
     ( Model
     , Msg(..)
     , SearchRule
+    , StoredModel
     , Tag
     , Task
     , TaskId
@@ -10,6 +11,7 @@ module Tasks.Model exposing
     , emptyModel
     , filterTasks
     , findCommonPrefix
+    , findMatchingTags
     , findProjectsMatchingSearch
     , findTask
     , isLoadModel
@@ -32,6 +34,12 @@ type alias TaskId =
 
 type alias Tag =
     String
+
+
+type alias StoredModel =
+    { tasks : Dict String Task
+    , projects : List String
+    }
 
 
 type alias SearchRule =
@@ -85,7 +93,7 @@ type Msg
     | ToggleStyle
     | SetProject Bool String
     | DeleteProject String
-    | LoadModel Model
+    | LoadModel StoredModel
     | SetViewState ViewState
     | SelectTask TaskId
     | FocusInput
@@ -214,3 +222,11 @@ showDoneTasks v =
 
         _ ->
             False
+
+
+findMatchingTags : Set String -> String -> List String
+findMatchingTags tags tag =
+    tags
+        |> Set.filter (String.startsWith tag)
+        |> Set.toList
+        |> List.sort
