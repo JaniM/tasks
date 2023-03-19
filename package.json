@@ -4,14 +4,13 @@
   "description": "",
   "main": "main.js",
   "scripts": {
-    "build": "elm make src/Main.elm --output=www/elm.js",
+    "build": "elm make src/Main.elm --warn --output=www/elm.js",
     "start": "npm run-script build && electron ."
   },
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "electron": "^23.1.2"
-  },
-  "dependencies": {
+    "electron": "^23.1.2",
+    "elm-review": "^2.9.1"
   }
 }

@@ -7,7 +7,7 @@ module Tasks.Input exposing
 
 import Parser exposing (..)
 import Set
-import Tasks.Model exposing (SearchRule)
+import Tasks.Task exposing (SearchRule)
 import Tasks.Utils exposing (choose)
 
 

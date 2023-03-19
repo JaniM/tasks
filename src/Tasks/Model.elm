@@ -1,11 +1,8 @@
 module Tasks.Model exposing
     ( Model
     , Msg(..)
-    , SearchRule
     , StoredModel
     , Tag
-    , Task
-    , TaskId
     , ViewState(..)
     , countTasks
     , emptyModel
@@ -24,12 +21,10 @@ import List.Extra as List
 import Maybe.Extra as Maybe
 import Random.Pcg.Extended as Pcg
 import Set exposing (Set)
+import Tasks.MainInput
 import Tasks.Style exposing (Style)
+import Tasks.Task exposing (..)
 import Time
-
-
-type alias TaskId =
-    String
 
 
 type alias Tag =
@@ -42,25 +37,8 @@ type alias StoredModel =
     }
 
 
-type alias SearchRule =
-    { snippets : List String
-    , tags : List String
-    }
-
-
-type alias Task =
-    { text : String
-    , tags : List Tag
-    , project : Maybe String
-    , createdAt : Time.Posix
-    , doneAt : Maybe Time.Posix
-    , id : TaskId
-    }
-
-
 type alias Model =
-    { text : String
-    , tasks : Dict String Task
+    { tasks : Dict String Task
     , filteredTasks : List Task
     , projects : List String
     , tags : Set String
@@ -70,7 +48,7 @@ type alias Model =
     , viewState : ViewState
     , timeZone : Time.Zone
     , search : Maybe SearchRule
-    , tagSuggestions : Maybe (List String)
+    , mainInput : Tasks.MainInput.Model
     }
 
 
@@ -82,9 +60,7 @@ type ViewState
 
 
 type Msg
-    = SetText String
-    | SubmitInput
-    | Tabfill
+    = MainInput Tasks.MainInput.Msg
     | AddTask String (List Tag) (Maybe String) Time.Posix
     | RemoveTask TaskId
     | UpdateTask TaskId (Task -> Task)
@@ -103,8 +79,7 @@ type Msg
 
 emptyModel : Model
 emptyModel =
-    { text = ""
-    , tasks = Dict.empty
+    { tasks = Dict.empty
     , filteredTasks = []
     , projects = []
     , tags = Set.empty
@@ -114,7 +89,7 @@ emptyModel =
     , viewState = None
     , timeZone = Time.utc
     , search = Nothing
-    , tagSuggestions = Nothing
+    , mainInput = Tasks.MainInput.defaultModel
     }
 
 

@@ -41,3 +41,8 @@ listOfOne list =
 
         _ ->
             Nothing
+
+
+mapFirst : (a -> c) -> ( a, b ) -> ( c, b )
+mapFirst f ( a, b ) =
+    ( f a, b )

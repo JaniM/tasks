@@ -34,3 +34,8 @@ darkStyle =
     , textColor = rgb255 255 255 255
     , textSize = intModular 16 1.2
     }
+
+
+paddingScale : Int -> Int
+paddingScale n =
+    5 * n

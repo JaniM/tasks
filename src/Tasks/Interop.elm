@@ -13,7 +13,8 @@ import Json.Encode as E
 import Json.Encode.Extra as E
 import Maybe.Extra
 import Result.Extra as Result
-import Tasks.Model exposing (Model, StoredModel, Task, TaskId)
+import Tasks.Model exposing (Model, StoredModel)
+import Tasks.Task exposing (Task, TaskId)
 import Time
 
 

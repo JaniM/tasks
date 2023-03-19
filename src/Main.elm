@@ -22,8 +22,10 @@ import Task
 import Tasks.Behavior
 import Tasks.Input
 import Tasks.Interop as Interop
-import Tasks.Model as Model exposing (Model, Msg(..), Task, ViewState(..), emptyModel)
-import Tasks.Style exposing (Style)
+import Tasks.MainInput
+import Tasks.Model as Model exposing (Model, Msg(..), ViewState(..), emptyModel)
+import Tasks.Style exposing (Style, paddingScale)
+import Tasks.Task exposing (Task)
 import Tasks.Utils exposing (..)
 import Time
 import Time.Format
@@ -65,11 +67,6 @@ subscriptions _ =
         [ Interop.subscribe interopHandler
         , Browser.Events.onKeyPress (D.succeed FocusInput)
         ]
-
-
-paddingScale : Int -> Int
-paddingScale n =
-    5 * n
 
 
 leftBarWidth : Length
@@ -140,8 +137,8 @@ contentRow : Model -> Element Msg
 contentRow model =
     let
         listing () =
-            case ( Tasks.Input.parseInput model.text, model.filteredTasks, model.project ) of
-                ( Ok (Tasks.Input.Project text), _, _ ) ->
+            case ( Tasks.MainInput.projectSearch model.mainInput, model.filteredTasks, model.project ) of
+                ( Just text, _, _ ) ->
                     viewProjectSearch model text
 
                 ( _, [], Just p ) ->
@@ -214,40 +211,8 @@ noFocusStyle =
 
 viewTaskInput : Model -> Element Msg
 viewTaskInput model =
-    let
-        tagline tags =
-            wrappedRow [ width fill, padding (paddingScale 2), spacing (paddingScale 2) ]
-                (List.map text tags)
-
-        suggestions =
-            case model.tagSuggestions of
-                Just [ tag ] ->
-                    -- TODO: this is a hack
-                    if String.contains (" " ++ tag) model.text then
-                        Element.none
-
-                    else
-                        tagline [ tag ]
-
-                Just tags ->
-                    tagline tags
-
-                Nothing ->
-                    Element.none
-    in
-    el [ width fill, padding (paddingScale 2) ] <|
-        Input.text
-            [ onKeys [ ( "Enter", SubmitInput ), ( "Tab", Tabfill ) ]
-            , Background.color model.style.taskBackground
-            , Input.focusedOnLoad
-            , Html.Attributes.id "input" |> htmlAttribute
-            , below suggestions
-            ]
-            { onChange = SetText
-            , text = model.text
-            , placeholder = Just (Input.placeholder [] (text "Add task"))
-            , label = Input.labelHidden "Add task"
-            }
+    Tasks.MainInput.view model.style model.mainInput
+        |> Element.map MainInput
 
 
 viewProjectSearch : Model -> String -> Element Msg

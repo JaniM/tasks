@@ -11,8 +11,10 @@ import Set exposing (Set)
 import Task
 import Tasks.Input exposing (parseInput, projectPrefix, searchPrefix)
 import Tasks.Interop as Interop
-import Tasks.Model as Model exposing (Model, Msg(..), Tag, Task, TaskId, ViewState(..))
+import Tasks.MainInput
+import Tasks.Model as Model exposing (Model, Msg(..), Tag, ViewState(..))
 import Tasks.Style exposing (darkStyle, lightStyle)
+import Tasks.Task exposing (Task, TaskId)
 import Tasks.Utils exposing (choose, listOfOne)
 import Time
 
@@ -30,8 +32,7 @@ addTaskToModel createTask model =
             Prng.Uuid.toString uuid
     in
     { model
-        | text = ""
-        , seed = seed
+        | seed = seed
         , tasks = Dict.insert id (createTask id) model.tasks
     }
 
@@ -90,126 +91,39 @@ switchProject project model =
         }
 
 
-{-| handle what happens when the user submits the main input field by pressing Enter.
-This currently applies to all states except Edit.
--}
-handleMainInput : Model -> ( Model, Cmd Msg )
-handleMainInput model =
-    case parseInput model.text of
-        Ok (Tasks.Input.Text text tags) ->
-            -- TODO: What's this assignment for?
-            { model | search = Nothing }
+handleMainInput : Tasks.MainInput.Msg -> Model -> ( Model, Cmd Msg )
+handleMainInput msg model =
+    let
+        global =
+            { projects = model.projects, tags = model.tags }
+
+        ( input, event ) =
+            Tasks.MainInput.update global msg model.mainInput
+
+        newModel =
+            { model
+                | mainInput = input
+                , search = Nothing
+            }
+    in
+    case event of
+        Tasks.MainInput.None ->
+            ( newModel, Cmd.none )
+
+        Tasks.MainInput.AddTask text tags ->
+            newModel
                 |> Cmd.withCmd (withTime (AddTask text tags model.project))
 
-        Ok (Tasks.Input.Project project) ->
-            model
-                |> switchProject project
-                |> setText ""
+        Tasks.MainInput.SetSearch rule ->
+            { newModel | search = Just rule }
                 |> Cmd.withNoCmd
 
-        Ok (Tasks.Input.Search rules) ->
-            { model | search = Just rules }
+        Tasks.MainInput.SetProject project ->
+            switchProject project newModel
                 |> Cmd.withNoCmd
 
-        Err _ ->
-            ( model, Interop.log "Parsing failed" )
-
-
-{-| Complete the last tag in the current query.
-Depenss on Model.tagSuggestions to be calculated properly.
-`tags` should be the list of tags currently in the query.
-Note: currently we reorder tags to appear after other content.
--}
-tabfillTag : Model -> List String -> String -> Model
-tabfillTag model tags textBeforeTags =
-    let
-        tagMatching =
-            model.tagSuggestions
-                |> Maybe.andThen listOfOne
-
-        init =
-            List.init tags |> Maybe.unwrap [] identity
-
-        newText =
-            case tagMatching of
-                Just newTag ->
-                    String.join " " (textBeforeTags :: init ++ [ newTag ])
-                        ++ " "
-
-                Nothing ->
-                    model.text
-    in
-    setText newText model
-
-
-{-| Perform tab completion for the main input field.
--}
-tabfill : Model -> Result String Model
-tabfill model =
-    case parseInput model.text of
-        Ok (Tasks.Input.Text text tags) ->
-            if String.startsWith text projectPrefix then
-                Ok (setText projectPrefix model)
-
-            else if String.startsWith text searchPrefix then
-                Ok (setText searchPrefix model)
-
-            else
-                Ok (tabfillTag model tags text)
-
-        Ok (Tasks.Input.Project text) ->
-            let
-                prefix =
-                    Model.findProjectsMatchingSearch text model.projects
-                        |> Model.findCommonPrefix
-                        |> Maybe.withDefault text
-            in
-            Ok (setText (projectPrefix ++ prefix) model)
-
-        Ok (Tasks.Input.Search rule) ->
-            Ok
-                (tabfillTag
-                    model
-                    rule.tags
-                    (searchPrefix ++ String.join " " rule.snippets)
-                )
-
-        Err _ ->
-            Err "Parsing failed"
-
-
-{-| Set new text for the main input field.
-This also calculates tab completion suggestions and applies search filters accordingly.
-TODO: Eventually we have to either debounce search or only set it on submit.
--}
-setText : String -> Model -> Model
-setText s model =
-    let
-        tagsMatchingLast tags =
-            List.last tags
-                |> Maybe.map (Model.findMatchingTags model.tags)
-    in
-    case parseInput s of
-        Ok (Tasks.Input.Search rule) ->
-            { model
-                | text = s
-                , search = Just rule
-                , tagSuggestions = tagsMatchingLast rule.tags
-            }
-
-        Ok (Tasks.Input.Text _ tags) ->
-            { model
-                | text = s
-                , search = Nothing
-                , tagSuggestions = tagsMatchingLast tags
-            }
-
-        _ ->
-            { model
-                | text = s
-                , search = Nothing
-                , tagSuggestions = Nothing
-            }
+        Tasks.MainInput.Edited task ->
+            Debug.todo ""
 
 
 {-| Removes the given task.
@@ -229,10 +143,18 @@ toggleStyle model =
 {-| Switch to a project. If already in that project, clear selection.
 If `clearText`, clears the main input field.
 -}
-setProject : Bool -> String -> Model -> Model
+setProject : Bool -> String -> Model -> ( Model, Cmd Msg )
 setProject clearText target model =
+    let
+        after =
+            if clearText then
+                handleMainInput (Tasks.MainInput.SetText "")
+
+            else
+                Cmd.withNoCmd
+    in
     { model | project = nothingIfUnchanged target model.project }
-        |> setText (choose "" model.text clearText)
+        |> after
 
 
 {-| Delete a project.
@@ -271,7 +193,7 @@ setViewState state model =
             { model | viewState = state }
 
         Edit task ->
-            { model | viewState = state, text = task.text }
+            Debug.todo ""
 
 
 {-| Select a task. Keeps note of view state hierarchy.
@@ -341,14 +263,8 @@ Note: This doesn't take model directly to enforce moving logic to separate funct
 handleMsg : Update
 handleMsg msg =
     case msg of
-        SetText s ->
-            Cmd.withNoCmd << setText s
-
-        SubmitInput ->
-            handleMainInput
-
-        Tabfill ->
-            tryLog tabfill
+        MainInput inputMsg ->
+            handleMainInput inputMsg
 
         RemoveTask id ->
             Cmd.withNoCmd << removeTask id
@@ -357,7 +273,7 @@ handleMsg msg =
             Cmd.withNoCmd << toggleStyle
 
         SetProject clearText target ->
-            Cmd.withNoCmd << setProject clearText target
+            setProject clearText target
 
         DeleteProject target ->
             Cmd.withNoCmd << deleteProject target
@@ -414,37 +330,6 @@ disableIf pred mw f msg =
 
     else
         mw f msg
-
-
-{-| Finish editing a task and switch back to the default view state.
-TODO: Switch the state one step "up" instead, so we could return to ShowDone etc.
--}
-finishEditState : Task -> Model -> Model
-finishEditState task model =
-    Model.updateTask (\t -> { t | text = model.text })
-        task.id
-        { model
-            | viewState = Model.None
-            , text = ""
-        }
-
-
-{-| Middleware to deal with the Edit state.
-Captures SubmitInput and Tabfill messages and lets the rest pass through.
--}
-handleEditState : Update -> Update
-handleEditState updater msg model =
-    case ( model.viewState, msg ) of
-        ( Edit task, SubmitInput ) ->
-            finishEditState task model
-                |> Cmd.withNoCmd
-
-        ( Edit _, Tabfill ) ->
-            -- We don't want to do anything here
-            model |> Cmd.withNoCmd
-
-        _ ->
-            updater msg model
 
 
 {-| Updates the filteredTasks list and the tag set _exhaustively_.
@@ -511,6 +396,5 @@ saveChangedTasks =
 update : Update
 update =
     handleMsg
-        |> handleEditState
         |> filterTasksAfterUpdate
         |> saveChangedTasks
