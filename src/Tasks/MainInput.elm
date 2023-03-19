@@ -22,7 +22,7 @@ import Set exposing (Set)
 import Tasks.Input exposing (parseInput, projectPrefix, searchPrefix)
 import Tasks.Style exposing (Style, paddingScale)
 import Tasks.Task exposing (SearchRule)
-import Tasks.Utils exposing (listOfOne, mapFirst)
+import Tasks.Utils exposing (findCommonPrefix, findMatchingPrefix, listOfOne, mapFirst)
 
 
 type alias DefaultState =
@@ -141,32 +141,6 @@ tabfillTag global state tags textBeforeTags =
     setText global newText state
 
 
-findProjectsMatchingSearch : String -> List String -> List String
-findProjectsMatchingSearch search projects =
-    let
-        lowerSearch : String
-        lowerSearch =
-            String.toLower search
-
-        pred : String -> Bool
-        pred =
-            String.toLower >> String.startsWith lowerSearch
-    in
-    List.filter pred projects
-
-
-findCommonPrefix : List String -> Maybe String
-findCommonPrefix strings =
-    let
-        first : String
-        first =
-            List.head strings |> Maybe.withDefault ""
-    in
-    List.reverseRange (String.length first) 1
-        |> List.map (\n -> String.slice 0 n first)
-        |> List.find (\p -> List.all (String.startsWith p) strings)
-
-
 {-| Perform tab completion for the main input field.
 -}
 tabfill : Global -> DefaultState -> ( DefaultState, Event )
@@ -186,7 +160,7 @@ tabfill global state =
             let
                 prefix : String
                 prefix =
-                    findProjectsMatchingSearch text global.projects
+                    findMatchingPrefix text global.projects
                         |> findCommonPrefix
                         |> Maybe.withDefault text
             in

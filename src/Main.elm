@@ -50,7 +50,7 @@ import Tasks.MainInput
 import Tasks.Model as Model exposing (Model, Msg(..), ViewState(..), emptyModel)
 import Tasks.Style exposing (Style, paddingScale)
 import Tasks.Task exposing (Task)
-import Tasks.Utils exposing (choose, epoch, groupByKey)
+import Tasks.Utils exposing (choose, epoch, findMatchingPrefix, groupByKey)
 import Time
 import Time.Format
 import Time.Format.Config.Config_fi_fi
@@ -259,7 +259,7 @@ viewProjectSearch { style, projects } prefix =
 
         suggestions : Element Msg
         suggestions =
-            Model.findProjectsMatchingSearch prefix projects
+            findMatchingPrefix prefix projects
                 |> List.map card
                 |> column [ spacing (paddingScale 1), height fill ]
 

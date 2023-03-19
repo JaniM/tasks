@@ -8,7 +8,6 @@ module Tasks.Model exposing
     , countTasks
     , emptyModel
     , filterTasks
-    , findProjectsMatchingSearch
     , isLoadModel
     , showDoneTasks
     , updateTask
@@ -154,20 +153,6 @@ countTasks tasks filter =
 updateTask : (Task -> Task) -> TaskId -> Model -> Model
 updateTask f id model =
     { model | tasks = Dict.update id (Maybe.map f) model.tasks }
-
-
-findProjectsMatchingSearch : String -> List String -> List String
-findProjectsMatchingSearch search projects =
-    let
-        lowerSearch : String
-        lowerSearch =
-            String.toLower search
-
-        pred : String -> Bool
-        pred =
-            String.toLower >> String.startsWith lowerSearch
-    in
-    List.filter pred projects
 
 
 showDoneTasks : ViewState -> Bool

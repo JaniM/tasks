@@ -1,4 +1,13 @@
-module Tasks.Utils exposing (choose, epoch, groupByKey, intModular, listOfOne, mapFirst)
+module Tasks.Utils exposing
+    ( choose
+    , epoch
+    , findCommonPrefix
+    , findMatchingPrefix
+    , groupByKey
+    , intModular
+    , listOfOne
+    , mapFirst
+    )
 
 import Element
 import List.Extra as List
@@ -46,3 +55,29 @@ listOfOne list =
 mapFirst : (a -> c) -> ( a, b ) -> ( c, b )
 mapFirst f ( a, b ) =
     ( f a, b )
+
+
+findMatchingPrefix : String -> List String -> List String
+findMatchingPrefix search projects =
+    let
+        lowerSearch : String
+        lowerSearch =
+            String.toLower search
+
+        pred : String -> Bool
+        pred =
+            String.toLower >> String.startsWith lowerSearch
+    in
+    List.filter pred projects
+
+
+findCommonPrefix : List String -> Maybe String
+findCommonPrefix strings =
+    let
+        first : String
+        first =
+            List.head strings |> Maybe.withDefault ""
+    in
+    List.reverseRange (String.length first) 1
+        |> List.map (\n -> String.slice 0 n first)
+        |> List.find (\p -> List.all (String.startsWith p) strings)
