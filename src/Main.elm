@@ -2,7 +2,34 @@ module Main exposing (main)
 
 import Browser
 import Browser.Events
-import Element exposing (..)
+import Element
+    exposing
+        ( Attribute
+        , Color
+        , Element
+        , Length
+        , alignTop
+        , below
+        , centerX
+        , centerY
+        , clip
+        , column
+        , el
+        , fill
+        , focused
+        , height
+        , htmlAttribute
+        , layout
+        , padding
+        , paragraph
+        , px
+        , rgba
+        , row
+        , scrollbarY
+        , spacing
+        , text
+        , width
+        )
 import Element.Background as Background
 import Element.Border
 import Element.Events exposing (onClick)
@@ -11,22 +38,19 @@ import Element.Input as Input
 import Element.Keyed
 import Element.Lazy
 import Html exposing (Html)
-import Html.Attributes
 import Html.Events as HtmlEvents
 import Json.Decode as D
-import Json.Decode.Extra as D
 import List.Extra as List
 import Maybe.Extra as Maybe
 import Random.Pcg.Extended as Pcg
 import Task
 import Tasks.Behavior
-import Tasks.Input
 import Tasks.Interop as Interop
 import Tasks.MainInput
 import Tasks.Model as Model exposing (Model, Msg(..), ViewState(..), emptyModel)
 import Tasks.Style exposing (Style, paddingScale)
 import Tasks.Task exposing (Task)
-import Tasks.Utils exposing (..)
+import Tasks.Utils exposing (choose, epoch, groupByKey)
 import Time
 import Time.Format
 import Time.Format.Config.Config_fi_fi
@@ -55,9 +79,10 @@ init ( seed, seedExtension ) =
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     let
+        interopHandler : Interop.FromJs -> Msg
         interopHandler fromJs =
             case fromJs of
-                Interop.Error _ ->
+                Interop.Error ->
                     NoOp
 
                 Interop.LoadModel m ->
@@ -77,6 +102,7 @@ leftBarWidth =
 view : Model -> Html Msg
 view model =
     let
+        newState : Msg
         newState =
             case model.viewState of
                 Selected _ n ->
@@ -136,6 +162,7 @@ showDoneButton style current =
 contentRow : Model -> Element Msg
 contentRow model =
     let
+        listing : () -> Element Msg
         listing () =
             case ( Tasks.MainInput.projectSearch model.mainInput, model.filteredTasks, model.project ) of
                 ( Just text, _, _ ) ->
@@ -147,6 +174,7 @@ contentRow model =
                 ( _, filteredTasks, _ ) ->
                     Element.Lazy.lazy3 viewTasks model.style model.viewState filteredTasks
 
+        pane : ViewState -> Element Msg
         pane state =
             case state of
                 Selected _ s ->
@@ -218,6 +246,7 @@ viewTaskInput model =
 viewProjectSearch : Model -> String -> Element Msg
 viewProjectSearch { style, projects } prefix =
     let
+        card : String -> Element Msg
         card project =
             el
                 [ width (px 150)
@@ -228,11 +257,13 @@ viewProjectSearch { style, projects } prefix =
                 ]
                 (paragraph [] [ text project ])
 
+        suggestions : Element Msg
         suggestions =
             Model.findProjectsMatchingSearch prefix projects
                 |> List.map card
                 |> column [ spacing (paddingScale 1), height fill ]
 
+        sideText : Element Msg
         sideText =
             if prefix == "" then
                 text "Clear project selection"
@@ -283,6 +314,7 @@ isSelected viewState task =
 viewTasks : Style -> ViewState -> List Task -> Element Msg
 viewTasks style viewState tasks =
     let
+        task_ : Task -> ( String, Element Msg )
         task_ task =
             ( task.id
             , viewTask style (isSelected viewState task) task
@@ -301,6 +333,7 @@ viewTasks style viewState tasks =
 taskDropdown : Style -> Task -> Element Msg
 taskDropdown style task =
     let
+        button : { label : Element msg, onPress : Maybe msg } -> Element msg
         button =
             Input.button
                 [ padding (paddingScale 1)
@@ -308,18 +341,21 @@ taskDropdown style task =
                 , Font.size (style.textSize -1)
                 ]
 
+        remove : Element Msg
         remove =
             button
                 { onPress = Just (RemoveTask task.id)
                 , label = text "Remove"
                 }
 
+        done : Element Msg
         done =
             button
                 { onPress = Just (MarkDone task.id)
                 , label = text "Done"
                 }
 
+        edit : Element Msg
         edit =
             Input.button
                 [ padding (paddingScale 1)
@@ -343,6 +379,7 @@ taskDropdown style task =
 viewTask : Style -> Bool -> Task -> Element Msg
 viewTask style selected task =
     let
+        dropdown : Element Msg
         dropdown =
             if selected then
                 taskDropdown style task
@@ -350,6 +387,7 @@ viewTask style selected task =
             else
                 Element.none
 
+        color : Color
         color =
             if Maybe.isJust task.doneAt then
                 style.doneBackground
@@ -360,6 +398,7 @@ viewTask style selected task =
             else
                 style.taskBackground
 
+        tags : Element Msg
         tags =
             row [ spacing (paddingScale 1) ]
                 (List.map text task.tags)
@@ -381,14 +420,17 @@ viewTask style selected task =
 viewDoneTasksTimeline : Time.Zone -> Style -> ViewState -> List Task -> Element Msg
 viewDoneTasksTimeline zone style viewState tasks =
     let
+        task_ : Task -> ( String, Element Msg )
         task_ task =
             ( task.id
             , viewTask style (isSelected viewState task) task
             )
 
+        posixToDate : Time.Posix -> String
         posixToDate =
             Time.Format.format Time.Format.Config.Config_fi_fi.config "%d.%m.%y" zone
 
+        group_ : ( Time.Posix, List Task ) -> ( String, Element Msg )
         group_ ( key, group ) =
             ( key |> Time.posixToMillis |> String.fromInt
             , column [ width fill ]
@@ -424,18 +466,6 @@ equalDate z a b =
     (Time.toDay z a == Time.toDay z b)
         && (Time.toMonth z a == Time.toMonth z b)
         && (Time.toYear z a == Time.toYear z b)
-
-
-onKeys : List ( String, msg ) -> Attribute msg
-onKeys pairs =
-    let
-        decodeKey ( key, m ) =
-            D.when (D.field "key" D.string) ((==) key) (D.succeed ( m, True ))
-    in
-    List.map decodeKey pairs
-        |> D.oneOf
-        |> HtmlEvents.preventDefaultOn "keydown"
-        |> htmlAttribute
 
 
 onClickNoPropagate : msg -> Attribute msg

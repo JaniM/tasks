@@ -5,7 +5,7 @@ module Tasks.Input exposing
     , searchPrefix
     )
 
-import Parser exposing (..)
+import Parser as P exposing ((|.), (|=), DeadEnd, Parser)
 import Set
 import Tasks.Task exposing (SearchRule)
 import Tasks.Utils exposing (choose)
@@ -34,29 +34,29 @@ searchPrefix =
 
 parseInput : String -> Result (List DeadEnd) InputDesc
 parseInput =
-    run <|
-        oneOf
-            [ succeed Project
-                |. token projectPrefix
+    P.run <|
+        P.oneOf
+            [ P.succeed Project
+                |. P.token projectPrefix
                 |= rest
-            , succeed partsToSearch
-                |. token searchPrefix
+            , P.succeed partsToSearch
+                |. P.token searchPrefix
                 |= multipleParts
-            , succeed partsToText
+            , P.succeed partsToText
                 |= multipleParts
             ]
 
 
 rest : Parser String
 rest =
-    succeed String.dropLeft
-        |= getOffset
-        |= getSource
+    P.succeed String.dropLeft
+        |= P.getOffset
+        |= P.getSource
 
 
 tag : Parser String
 tag =
-    variable
+    P.variable
         { start = (==) '#'
         , inner = \c -> Char.isAlphaNum c || c == '_' || c == '-'
         , reserved = Set.empty
@@ -65,7 +65,7 @@ tag =
 
 word : Parser String
 word =
-    variable
+    P.variable
         { start = (/=) ' '
         , inner = (/=) ' '
         , reserved = Set.empty
@@ -75,20 +75,18 @@ word =
 multipleParts : Parser (List TextPart)
 multipleParts =
     let
-        addPart revParts part =
-            Loop (part :: revParts)
-
+        step : List TextPart -> Parser (P.Step (List TextPart) (List TextPart))
         step revParts =
-            oneOf
-                [ succeed (addPart revParts << TagPart)
+            P.oneOf
+                [ P.succeed (\part -> P.Loop (TagPart part :: revParts))
                     |= tag
-                , succeed (addPart revParts << TextPart)
+                , P.succeed (\part -> P.Loop (TextPart part :: revParts))
                     |= word
-                , succeed (choose (Done revParts) (Loop revParts) << String.isEmpty)
-                    |= getChompedString spaces
+                , P.succeed (choose (P.Done revParts) (P.Loop revParts) << String.isEmpty)
+                    |= P.getChompedString P.spaces
                 ]
     in
-    loop [] step
+    P.loop [] step
 
 
 partsToText : List TextPart -> InputDesc
@@ -101,13 +99,12 @@ partsToSearch =
     collectParts >> Search
 
 
-
--- SearchRule happens to have the right shape - this doesn't need to last
-
-
+{-| SearchRule happens to have the right shape - this doesn't need to last
+-}
 collectParts : List TextPart -> SearchRule
 collectParts =
     let
+        loop : List String -> List String -> List TextPart -> SearchRule
         loop text tags parts =
             case parts of
                 (TextPart t) :: nparts ->

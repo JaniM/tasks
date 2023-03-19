@@ -1,4 +1,4 @@
-module Tasks.Utils exposing (..)
+module Tasks.Utils exposing (choose, epoch, groupByKey, intModular, listOfOne, mapFirst)
 
 import Element
 import List.Extra as List

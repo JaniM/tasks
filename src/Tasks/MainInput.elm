@@ -1,5 +1,6 @@
 module Tasks.MainInput exposing
     ( Event(..)
+    , Global
     , Model
     , Msg(..)
     , defaultModel
@@ -8,7 +9,7 @@ module Tasks.MainInput exposing
     , view
     )
 
-import Element exposing (..)
+import Element exposing (Attribute, Element, el, fill, padding, spacing, width, wrappedRow)
 import Element.Background as Background
 import Element.Input
 import Html.Attributes
@@ -20,19 +21,13 @@ import Maybe.Extra as Maybe
 import Set exposing (Set)
 import Tasks.Input exposing (parseInput, projectPrefix, searchPrefix)
 import Tasks.Style exposing (Style, paddingScale)
-import Tasks.Task exposing (SearchRule, Task)
+import Tasks.Task exposing (SearchRule)
 import Tasks.Utils exposing (listOfOne, mapFirst)
 
 
 type alias DefaultState =
     { text : String
     , tagSuggestions : Maybe (List String)
-    }
-
-
-type alias EditState =
-    { task : Task
-    , text : String
     }
 
 
@@ -44,7 +39,6 @@ type alias Global =
 
 type Model
     = Default DefaultState
-    | Edit EditState
 
 
 type Msg
@@ -58,7 +52,6 @@ type Event
     | AddTask String (List String)
     | SetSearch SearchRule
     | SetProject String
-    | Edited Task
 
 
 defaultModel : Model
@@ -100,9 +93,6 @@ projectSearch model =
                 _ ->
                     Nothing
 
-        _ ->
-            Nothing
-
 
 handleMainInput : DefaultState -> ( DefaultState, Event )
 handleMainInput state =
@@ -128,16 +118,20 @@ Note: currently we reorder tags to appear after other content.
 tabfillTag : Global -> DefaultState -> List String -> String -> ( DefaultState, Event )
 tabfillTag global state tags textBeforeTags =
     let
+        tagMatching : Maybe String
         tagMatching =
             state.tagSuggestions
                 |> Maybe.andThen listOfOne
 
-        init =
-            List.init tags |> Maybe.unwrap [] identity
-
+        newText : String
         newText =
             case tagMatching of
                 Just newTag ->
+                    let
+                        init : List String
+                        init =
+                            List.init tags |> Maybe.unwrap [] identity
+                    in
                     String.join " " (textBeforeTags :: init ++ [ newTag ])
                         ++ " "
 
@@ -150,9 +144,11 @@ tabfillTag global state tags textBeforeTags =
 findProjectsMatchingSearch : String -> List String -> List String
 findProjectsMatchingSearch search projects =
     let
+        lowerSearch : String
         lowerSearch =
             String.toLower search
 
+        pred : String -> Bool
         pred =
             String.toLower >> String.startsWith lowerSearch
     in
@@ -162,6 +158,7 @@ findProjectsMatchingSearch search projects =
 findCommonPrefix : List String -> Maybe String
 findCommonPrefix strings =
     let
+        first : String
         first =
             List.head strings |> Maybe.withDefault ""
     in
@@ -187,6 +184,7 @@ tabfill global state =
 
         Ok (Tasks.Input.Project text) ->
             let
+                prefix : String
                 prefix =
                     findProjectsMatchingSearch text global.projects
                         |> findCommonPrefix
@@ -208,6 +206,7 @@ tabfill global state =
 setText : Global -> String -> DefaultState -> ( DefaultState, Event )
 setText global s state =
     let
+        tagsMatchingLast : List String -> Maybe (List String)
         tagsMatchingLast tags =
             List.last tags
                 |> Maybe.map (findMatchingTags global.tags)
@@ -255,9 +254,6 @@ update global msg model =
             updateDefault global msg state
                 |> mapFirst Default
 
-        Edit state ->
-            Debug.todo ""
-
 
 
 -- VIEW
@@ -269,17 +265,16 @@ view style model =
         Default state ->
             viewTaskInput style state
 
-        Edit state ->
-            Debug.todo ""
-
 
 viewTaskInput : Style -> DefaultState -> Element Msg
 viewTaskInput style model =
     let
+        tagline : List String -> Element Msg
         tagline tags =
             wrappedRow [ width fill, padding (paddingScale 2), spacing (paddingScale 2) ]
-                (List.map text tags)
+                (List.map Element.text tags)
 
+        suggestions : Element Msg
         suggestions =
             case model.tagSuggestions of
                 Just [ tag ] ->
@@ -301,12 +296,12 @@ viewTaskInput style model =
             [ onKeys [ ( "Enter", SubmitInput ), ( "Tab", Tabfill ) ]
             , Background.color style.taskBackground
             , Element.Input.focusedOnLoad
-            , Html.Attributes.id "input" |> htmlAttribute
-            , below suggestions
+            , Html.Attributes.id "input" |> Element.htmlAttribute
+            , Element.below suggestions
             ]
             { onChange = SetText
             , text = model.text
-            , placeholder = Just (Element.Input.placeholder [] (text "Add task"))
+            , placeholder = Just (Element.Input.placeholder [] (Element.text "Add task"))
             , label = Element.Input.labelHidden "Add task"
             }
 
@@ -314,10 +309,11 @@ viewTaskInput style model =
 onKeys : List ( String, msg ) -> Attribute msg
 onKeys pairs =
     let
+        decodeKey : ( String, msg ) -> D.Decoder ( msg, Bool )
         decodeKey ( key, m ) =
             D.when (D.field "key" D.string) ((==) key) (D.succeed ( m, True ))
     in
     List.map decodeKey pairs
         |> D.oneOf
         |> Html.Events.preventDefaultOn "keydown"
-        |> htmlAttribute
+        |> Element.htmlAttribute

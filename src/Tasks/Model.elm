@@ -1,5 +1,6 @@
 module Tasks.Model exposing
-    ( Model
+    ( Filter
+    , Model
     , Msg(..)
     , StoredModel
     , Tag
@@ -7,23 +8,19 @@ module Tasks.Model exposing
     , countTasks
     , emptyModel
     , filterTasks
-    , findCommonPrefix
-    , findMatchingTags
     , findProjectsMatchingSearch
-    , findTask
     , isLoadModel
     , showDoneTasks
     , updateTask
     )
 
 import Dict exposing (Dict)
-import List.Extra as List
 import Maybe.Extra as Maybe
 import Random.Pcg.Extended as Pcg
 import Set exposing (Set)
 import Tasks.MainInput
 import Tasks.Style exposing (Style)
-import Tasks.Task exposing (..)
+import Tasks.Task exposing (SearchRule, Task, TaskId)
 import Time
 
 
@@ -118,6 +115,7 @@ filterTasksBySearch search tasks =
     case search of
         Just { snippets, tags } ->
             let
+                lowerSnippets : List String
                 lowerSnippets =
                     List.map String.toLower snippets
             in
@@ -153,33 +151,19 @@ countTasks tasks filter =
         |> List.length
 
 
-findTask : Model -> TaskId -> Maybe Task
-findTask model id =
-    Dict.get id model.tasks
-
-
 updateTask : (Task -> Task) -> TaskId -> Model -> Model
 updateTask f id model =
     { model | tasks = Dict.update id (Maybe.map f) model.tasks }
 
 
-findCommonPrefix : List String -> Maybe String
-findCommonPrefix strings =
-    let
-        first =
-            List.head strings |> Maybe.withDefault ""
-    in
-    List.reverseRange (String.length first) 1
-        |> List.map (\n -> String.slice 0 n first)
-        |> List.find (\p -> List.all (String.startsWith p) strings)
-
-
 findProjectsMatchingSearch : String -> List String -> List String
 findProjectsMatchingSearch search projects =
     let
+        lowerSearch : String
         lowerSearch =
             String.toLower search
 
+        pred : String -> Bool
         pred =
             String.toLower >> String.startsWith lowerSearch
     in
@@ -197,11 +181,3 @@ showDoneTasks v =
 
         _ ->
             False
-
-
-findMatchingTags : Set String -> String -> List String
-findMatchingTags tags tag =
-    tags
-        |> Set.filter (String.startsWith tag)
-        |> Set.toList
-        |> List.sort

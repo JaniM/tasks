@@ -1,21 +1,19 @@
-module Tasks.Behavior exposing (update)
+module Tasks.Behavior exposing (Update, update)
 
 import Browser.Dom
 import Cmd.Extra as Cmd
 import Dict
-import List.Extra as List
 import Maybe.Extra as Maybe
 import Prng.Uuid
 import Random.Pcg.Extended as Pcg
 import Set exposing (Set)
 import Task
-import Tasks.Input exposing (parseInput, projectPrefix, searchPrefix)
 import Tasks.Interop as Interop
 import Tasks.MainInput
-import Tasks.Model as Model exposing (Model, Msg(..), Tag, ViewState(..))
+import Tasks.Model as Model exposing (Model, Msg(..), ViewState(..))
 import Tasks.Style exposing (darkStyle, lightStyle)
 import Tasks.Task exposing (Task, TaskId)
-import Tasks.Utils exposing (choose, listOfOne)
+import Tasks.Utils exposing (choose)
 import Time
 
 
@@ -28,6 +26,7 @@ addTaskToModel createTask model =
         ( uuid, seed ) =
             Pcg.step Prng.Uuid.generator model.seed
 
+        id : String
         id =
             Prng.Uuid.toString uuid
     in
@@ -35,18 +34,6 @@ addTaskToModel createTask model =
         | seed = seed
         , tasks = Dict.insert id (createTask id) model.tasks
     }
-
-
-{-| If the update fails, log the result and return old model.
--}
-tryLog : (a -> Result String a) -> a -> ( a, Cmd msg )
-tryLog f val =
-    case f val of
-        Ok x ->
-            ( x, Cmd.none )
-
-        Err e ->
-            ( val, Interop.log e )
 
 
 onlyCmd : (model -> Cmd msg) -> model -> ( model, Cmd msg )
@@ -94,12 +81,14 @@ switchProject project model =
 handleMainInput : Tasks.MainInput.Msg -> Model -> ( Model, Cmd Msg )
 handleMainInput msg model =
     let
+        global : Tasks.MainInput.Global
         global =
             { projects = model.projects, tags = model.tags }
 
         ( input, event ) =
             Tasks.MainInput.update global msg model.mainInput
 
+        newModel : Model
         newModel =
             { model
                 | mainInput = input
@@ -122,9 +111,6 @@ handleMainInput msg model =
             switchProject project newModel
                 |> Cmd.withNoCmd
 
-        Tasks.MainInput.Edited task ->
-            Debug.todo ""
-
 
 {-| Removes the given task.
 -}
@@ -146,6 +132,7 @@ If `clearText`, clears the main input field.
 setProject : Bool -> String -> Model -> ( Model, Cmd Msg )
 setProject clearText target model =
     let
+        after : Model -> ( Model, Cmd Msg )
         after =
             if clearText then
                 handleMainInput (Tasks.MainInput.SetText "")
@@ -192,7 +179,7 @@ setViewState state model =
         ShowDone ->
             { model | viewState = state }
 
-        Edit task ->
+        Edit _ ->
             Debug.todo ""
 
 
@@ -201,6 +188,7 @@ setViewState state model =
 selectTask : TaskId -> Model -> Model
 selectTask id model =
     let
+        oldState : ViewState
         oldState =
             case model.viewState of
                 -- We don't want to nest selections.
@@ -219,6 +207,7 @@ If it was already done, marks it undone.
 markDone : TaskId -> Cmd Msg
 markDone id =
     let
+        updater : Time.Posix -> Task -> Task
         updater time task =
             { task
                 | doneAt =
@@ -338,6 +327,7 @@ This will check every single task. Slow, but works for now. :clueless:
 updateFilteredTasks : Model -> Model
 updateFilteredTasks model =
     let
+        sortRule : ViewState -> Task -> Int
         sortRule v =
             case v of
                 Selected _ x ->
@@ -351,12 +341,14 @@ updateFilteredTasks model =
 
         -- TODO: This is a temporary hack.
         -- It is highly unwise to go over every single task for tags again and again.
+        tags : Set String
         tags =
             Dict.toList model.tasks
                 |> List.map Tuple.second
                 |> List.concatMap .tags
                 |> Set.fromList
 
+        filterTasks : List Task -> List Task
         filterTasks =
             Model.filterTasks
                 { project = model.project

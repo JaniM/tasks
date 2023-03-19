@@ -1,24 +1,22 @@
 port module Tasks.Interop exposing
     ( FromJs(..)
     , load
-    , log
     , save
     , subscribe
     )
 
-import Dict exposing (Dict)
+import Dict
 import Json.Decode as D
-import Json.Decode.Extra as D
 import Json.Encode as E
 import Json.Encode.Extra as E
-import Maybe.Extra
 import Result.Extra as Result
 import Tasks.Model exposing (Model, StoredModel)
 import Tasks.Task exposing (Task, TaskId)
 import Time
 
 
-port log : String -> Cmd msg
+
+-- port log : String -> Cmd msg
 
 
 port requestJs : E.Value -> Cmd msg
@@ -38,7 +36,7 @@ type ToJs
 -}
 type FromJs
     = LoadModel StoredModel
-    | Error D.Error
+    | Error
 
 
 {-| Request JS to save the model.
@@ -68,7 +66,7 @@ performRequest =
 subscribe : (FromJs -> msg) -> Sub msg
 subscribe createMsg =
     D.decodeValue responseDecoder
-        >> Result.unpack Error identity
+        >> Result.unwrap Error identity
         >> createMsg
         |> fromJs
 

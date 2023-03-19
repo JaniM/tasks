@@ -1,7 +1,7 @@
-module Tasks.Style exposing (..)
+module Tasks.Style exposing (Style, darkStyle, lightStyle, paddingScale)
 
 import Element exposing (Color, rgb255)
-import Tasks.Utils exposing (..)
+import Tasks.Utils exposing (intModular)
 
 
 type alias Style =
