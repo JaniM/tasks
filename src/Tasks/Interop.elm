@@ -140,10 +140,10 @@ decodeModel =
         fixProject : String -> String
         fixProject p =
             if String.startsWith "#" p then
-                p
+                String.dropLeft 1 p
 
             else
-                "#" ++ p
+                p
 
         projects : D.Decoder (List String)
         projects =

@@ -72,16 +72,27 @@ word =
         }
 
 
+escapedWord : Parser String
+escapedWord =
+    P.succeed identity
+        |. P.token "\\"
+        |= word
+
+
 multipleParts : Parser (List TextPart)
 multipleParts =
     let
         step : List TextPart -> Parser (P.Step (List TextPart) (List TextPart))
         step revParts =
+            let
+                part : (a -> TextPart) -> Parser a -> Parser (P.Step (List TextPart) b)
+                part kind =
+                    P.map (\p -> P.Loop (kind p :: revParts))
+            in
             P.oneOf
-                [ P.succeed (\part -> P.Loop (TagPart part :: revParts))
-                    |= tag
-                , P.succeed (\part -> P.Loop (TextPart part :: revParts))
-                    |= word
+                [ part TagPart tag
+                , part TextPart escapedWord
+                , part TextPart word
                 , P.succeed (choose (P.Done revParts) (P.Loop revParts) << String.isEmpty)
                     |= P.getChompedString P.spaces
                 ]

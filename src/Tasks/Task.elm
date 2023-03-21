@@ -2,7 +2,7 @@ module Tasks.Task exposing
     ( SearchRule
     , Task
     , TaskId
-    , searchOneTag
+    , searchProject
     , emptySwarch
     )
 
@@ -27,9 +27,9 @@ type alias Task =
     , id : TaskId
     }
 
-searchOneTag : String -> SearchRule
-searchOneTag tag =
-    { tags = [tag]
+searchProject : String -> SearchRule
+searchProject tag =
+    { tags = ["#" ++ tag]
     , snippets = []
     }
 

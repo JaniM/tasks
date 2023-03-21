@@ -99,16 +99,53 @@ isLoadModel msg =
             False
 
 
+filterTasksByTags : List Tag -> List Task -> List Task
+filterTasksByTags tags tasks =
+    let
+        tagIn : Task -> Tag -> Bool
+        tagIn task tag =
+            List.member tag task.tags
+
+        pred : Task -> Bool
+        pred task =
+            List.all (tagIn task) tags
+    in
+    case tags of
+        [] ->
+            tasks
+
+        _ ->
+            List.filter pred tasks
+
+
+filterTasksBySnippets : List String -> List Task -> List Task
+filterTasksBySnippets snippets tasks =
+    let
+        lowerSnippets : List String
+        lowerSnippets =
+            List.map String.toLower snippets
+
+        snippetIn : Task -> String -> Bool
+        snippetIn task snippet =
+            String.contains snippet (String.toLower task.text)
+
+        pred : Task -> Bool
+        pred task =
+            List.all (snippetIn task) lowerSnippets
+    in
+    case snippets of
+        [] ->
+            tasks
+
+        _ ->
+            List.filter pred tasks
+
+
 filterTasksBySearch : SearchRule -> List Task -> List Task
 filterTasksBySearch { snippets, tags } tasks =
-            let
-                lowerSnippets : List String
-                lowerSnippets =
-                    List.map String.toLower snippets
-            in
-            tasks
-                |> List.filter (\task -> List.isEmpty tags || List.any (\tag -> List.member tag tags) task.tags)
-                |> List.filter (\task -> List.all (\s -> String.contains s (String.toLower task.text)) lowerSnippets)
+    tasks
+        |> filterTasksByTags tags
+        |> filterTasksBySnippets snippets
 
 
 type alias Filter =
@@ -120,6 +157,7 @@ type alias Filter =
 filterTasks : Filter -> List Task -> List Task
 filterTasks filter tasks =
     tasks
+        -- Filtering out finished tasks first is going to eliminate *most* tasks from the search.
         |> List.filter (\t -> Maybe.isJust t.doneAt == filter.done)
         |> filterTasksBySearch filter.search
 

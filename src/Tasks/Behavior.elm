@@ -12,7 +12,7 @@ import Tasks.Interop as Interop
 import Tasks.MainInput
 import Tasks.Model as Model exposing (Model, Msg(..), ViewState(..))
 import Tasks.Style exposing (darkStyle, lightStyle)
-import Tasks.Task exposing (SearchRule, Task, TaskId, emptySwarch, searchOneTag)
+import Tasks.Task exposing (SearchRule, Task, TaskId, emptySwarch, searchProject)
 import Tasks.Utils exposing (choose)
 import Time
 
@@ -102,7 +102,7 @@ handleMainInput msg model =
         addProjectToTags tags =
             case model.project of
                 Just p ->
-                    tags ++ [ p ]
+                    tags ++ [ "#" ++ p ]
 
                 Nothing ->
                     tags
@@ -367,7 +367,7 @@ updateFilteredTasks model =
                     s
 
                 ( Nothing, Just p ) ->
-                    searchOneTag p
+                    searchProject p
 
                 ( Nothing, Nothing ) ->
                     emptySwarch

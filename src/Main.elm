@@ -54,7 +54,7 @@ import Tasks.Utils exposing (choose, epoch, findMatchingPrefix, groupByKey)
 import Time
 import Time.Format
 import Time.Format.Config.Config_fi_fi
-import Tasks.Task exposing (searchOneTag)
+import Tasks.Task exposing (searchProject)
 
 
 main : Program ( Int, List Int ) Model Msg
@@ -226,7 +226,7 @@ projectCard model project =
         , onClick (SetProject False project)
         ]
         [ paragraph [ width fill ] [ text project ]
-        , Model.countTasks model.tasks { done = False, search = searchOneTag project }
+        , Model.countTasks model.tasks { done = False, search = searchProject project }
             |> String.fromInt
             |> text
         ]
