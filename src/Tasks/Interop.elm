@@ -7,8 +7,10 @@ port module Tasks.Interop exposing
 
 import Dict
 import Json.Decode as D
+import Json.Decode.Extra as D
 import Json.Encode as E
 import Json.Encode.Extra as E
+import Maybe.Extra
 import Result.Extra as Result
 import Tasks.Model exposing (Model, StoredModel)
 import Tasks.Task exposing (Task, TaskId)
@@ -107,7 +109,6 @@ encodeModel model =
             E.object
                 [ ( "text", E.string t.text )
                 , ( "tags", E.list E.string t.tags )
-                , ( "project", E.maybe E.string t.project )
                 , ( "createdAt", encodeTime t.createdAt )
                 , ( "doneAt", E.maybe encodeTime t.doneAt )
                 ]
@@ -121,18 +122,38 @@ encodeModel model =
 decodeModel : D.Decoder StoredModel
 decodeModel =
     let
+        -- If there is a project, make it the last tag.
+        tags : D.Decoder (List String)
+        tags =
+            D.map2 (\t -> Maybe.Extra.unwrap t (\x -> t ++ [ "#" ++ x ]))
+                (D.field "tags" (D.list D.string))
+                (D.optionalField "project" D.string)
+
         task : D.Decoder (TaskId -> Task)
         task =
-            D.map5 Task
+            D.map4 Task
                 (D.field "text" D.string)
-                (D.field "tags" (D.list D.string))
-                (D.field "project" (D.maybe D.string))
+                tags
                 (D.field "createdAt" decodeTime)
                 (D.field "doneAt" (D.maybe decodeTime))
+
+        fixProject : String -> String
+        fixProject p =
+            if String.startsWith "#" p then
+                p
+
+            else
+                "#" ++ p
+
+        projects : D.Decoder (List String)
+        projects =
+            D.list D.string
+                |> D.field "projects"
+                |> D.map (List.map fixProject)
     in
     D.map2 StoredModel
         (D.field "tasks" (D.dict task) |> D.map (Dict.map (|>)))
-        (D.field "projects" (D.list D.string))
+        projects
 
 
 decodeTime : D.Decoder Time.Posix

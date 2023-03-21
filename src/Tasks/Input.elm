@@ -24,12 +24,12 @@ type TextPart
 
 projectPrefix : String
 projectPrefix =
-    "project:"
+    "/project "
 
 
 searchPrefix : String
 searchPrefix =
-    "search:"
+    "/search "
 
 
 parseInput : String -> Result (List DeadEnd) InputDesc

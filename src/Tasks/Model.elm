@@ -57,7 +57,7 @@ type ViewState
 
 type Msg
     = MainInput Tasks.MainInput.Msg
-    | AddTask String (List Tag) (Maybe String) Time.Posix
+    | AddTask String (List Tag) Time.Posix
     | RemoveTask TaskId
     | UpdateTask TaskId (Task -> Task)
       -- TODO: Maybe this should be generalized to something like SendCmd?
@@ -99,20 +99,8 @@ isLoadModel msg =
             False
 
 
-filterTasksByProject : Maybe String -> List Task -> List Task
-filterTasksByProject project tasks =
-    case project of
-        Just p ->
-            tasks |> List.filter (\x -> x.project == Just p)
-
-        Nothing ->
-            tasks
-
-
-filterTasksBySearch : Maybe SearchRule -> List Task -> List Task
-filterTasksBySearch search tasks =
-    case search of
-        Just { snippets, tags } ->
+filterTasksBySearch : SearchRule -> List Task -> List Task
+filterTasksBySearch { snippets, tags } tasks =
             let
                 lowerSnippets : List String
                 lowerSnippets =
@@ -122,21 +110,16 @@ filterTasksBySearch search tasks =
                 |> List.filter (\task -> List.isEmpty tags || List.any (\tag -> List.member tag tags) task.tags)
                 |> List.filter (\task -> List.all (\s -> String.contains s (String.toLower task.text)) lowerSnippets)
 
-        Nothing ->
-            tasks
-
 
 type alias Filter =
-    { project : Maybe String
-    , done : Bool
-    , search : Maybe SearchRule
+    { done : Bool
+    , search : SearchRule
     }
 
 
 filterTasks : Filter -> List Task -> List Task
 filterTasks filter tasks =
     tasks
-        |> filterTasksByProject filter.project
         |> List.filter (\t -> Maybe.isJust t.doneAt == filter.done)
         |> filterTasksBySearch filter.search
 

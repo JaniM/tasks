@@ -2,6 +2,8 @@ module Tasks.Task exposing
     ( SearchRule
     , Task
     , TaskId
+    , searchOneTag
+    , emptySwarch
     )
 
 import Time
@@ -20,8 +22,16 @@ type alias SearchRule =
 type alias Task =
     { text : String
     , tags : List String
-    , project : Maybe String
     , createdAt : Time.Posix
     , doneAt : Maybe Time.Posix
     , id : TaskId
     }
+
+searchOneTag : String -> SearchRule
+searchOneTag tag =
+    { tags = [tag]
+    , snippets = []
+    }
+
+emptySwarch : SearchRule
+emptySwarch = { snippets = [], tags = [] }

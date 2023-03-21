@@ -12,7 +12,7 @@ import Tasks.Interop as Interop
 import Tasks.MainInput
 import Tasks.Model as Model exposing (Model, Msg(..), ViewState(..))
 import Tasks.Style exposing (darkStyle, lightStyle)
-import Tasks.Task exposing (Task, TaskId)
+import Tasks.Task exposing (SearchRule, Task, TaskId, emptySwarch, searchOneTag)
 import Tasks.Utils exposing (choose)
 import Time
 
@@ -83,7 +83,10 @@ handleMainInput msg model =
     let
         global : Tasks.MainInput.Global
         global =
-            { projects = model.projects, tags = model.tags }
+            { projects = model.projects
+            , project = model.project
+            , tags = model.tags
+            }
 
         ( input, event ) =
             Tasks.MainInput.update global msg model.mainInput
@@ -94,6 +97,15 @@ handleMainInput msg model =
                 | mainInput = input
                 , search = Nothing
             }
+
+        addProjectToTags : List String -> List String
+        addProjectToTags tags =
+            case model.project of
+                Just p ->
+                    tags ++ [ p ]
+
+                Nothing ->
+                    tags
     in
     case event of
         Tasks.MainInput.None ->
@@ -101,7 +113,7 @@ handleMainInput msg model =
 
         Tasks.MainInput.AddTask text tags ->
             newModel
-                |> Cmd.withCmd (withTime (AddTask text tags model.project))
+                |> Cmd.withCmd (withTime (AddTask text (addProjectToTags tags)))
 
         Tasks.MainInput.SetSearch rule ->
             { newModel | search = Just rule }
@@ -279,8 +291,8 @@ handleMsg msg =
         FocusInput ->
             onlyCmd <| always focusInput
 
-        AddTask text tags project time ->
-            Cmd.withNoCmd << addTaskToModel (Task text tags project time Nothing)
+        AddTask text tags time ->
+            Cmd.withNoCmd << addTaskToModel (Task text tags time Nothing)
 
         MarkDone taskId ->
             onlyCmd <| always <| markDone taskId
@@ -348,12 +360,23 @@ updateFilteredTasks model =
                 |> List.concatMap .tags
                 |> Set.fromList
 
+        search : SearchRule
+        search =
+            case ( model.search, model.project ) of
+                ( Just s, _ ) ->
+                    s
+
+                ( Nothing, Just p ) ->
+                    searchOneTag p
+
+                ( Nothing, Nothing ) ->
+                    emptySwarch
+
         filterTasks : List Task -> List Task
         filterTasks =
             Model.filterTasks
-                { project = model.project
-                , done = Model.showDoneTasks model.viewState
-                , search = model.search
+                { done = Model.showDoneTasks model.viewState
+                , search = search
                 }
     in
     { model

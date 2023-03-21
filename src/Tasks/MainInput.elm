@@ -34,6 +34,7 @@ type alias DefaultState =
 type alias Global =
     { tags : Set String
     , projects : List String
+    , project : Maybe String
     }
 
 
@@ -115,7 +116,7 @@ Depenss on Model.tagSuggestions to be calculated properly.
 `tags` should be the list of tags currently in the query.
 Note: currently we reorder tags to appear after other content.
 -}
-tabfillTag : Global -> DefaultState -> List String -> String -> ( DefaultState, Event )
+tabfillTag : Global -> DefaultState -> List String -> List String -> ( DefaultState, Event )
 tabfillTag global state tags textBeforeTags =
     let
         tagMatching : Maybe String
@@ -132,8 +133,10 @@ tabfillTag global state tags textBeforeTags =
                         init =
                             List.init tags |> Maybe.unwrap [] identity
                     in
-                    String.join " " (textBeforeTags :: init ++ [ newTag ])
-                        ++ " "
+                    textBeforeTags ++ init ++ [ newTag ]
+                        |> List.map String.trim
+                        |> String.join " "
+                        |> (\x -> x ++ " ")
 
                 Nothing ->
                     state.text
@@ -151,10 +154,17 @@ tabfill global state =
                 setText global projectPrefix state
 
             else if String.startsWith text searchPrefix then
-                setText global searchPrefix state
+                setText
+                    global
+                    (Maybe.unwrap
+                        searchPrefix
+                        (\p -> searchPrefix ++ p ++ " ")
+                        global.project
+                    )
+                    state
 
             else
-                tabfillTag global state tags text
+                tabfillTag global state tags [ text ]
 
         Ok (Tasks.Input.Project text) ->
             let
@@ -171,7 +181,7 @@ tabfill global state =
                 global
                 state
                 rule.tags
-                (searchPrefix ++ String.join " " rule.snippets)
+                (searchPrefix :: rule.snippets)
 
         Err _ ->
             ( state, None )

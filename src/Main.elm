@@ -54,6 +54,7 @@ import Tasks.Utils exposing (choose, epoch, findMatchingPrefix, groupByKey)
 import Time
 import Time.Format
 import Time.Format.Config.Config_fi_fi
+import Tasks.Task exposing (searchOneTag)
 
 
 main : Program ( Int, List Int ) Model Msg
@@ -90,7 +91,7 @@ subscriptions _ =
     in
     Sub.batch
         [ Interop.subscribe interopHandler
-        , Browser.Events.onKeyPress (D.succeed FocusInput)
+        , Browser.Events.onKeyDown (D.succeed FocusInput)
         ]
 
 
@@ -225,7 +226,7 @@ projectCard model project =
         , onClick (SetProject False project)
         ]
         [ paragraph [ width fill ] [ text project ]
-        , Model.countTasks model.tasks { project = Just project, done = False, search = Nothing }
+        , Model.countTasks model.tasks { done = False, search = searchOneTag project }
             |> String.fromInt
             |> text
         ]
@@ -400,8 +401,8 @@ viewTask style selected task =
 
         tags : Element Msg
         tags =
-            row [ spacing (paddingScale 1) ]
-                (List.map text task.tags)
+            row [ spacing (paddingScale 2) ]
+                (List.map (text << String.dropLeft 1) task.tags)
     in
     row
         [ width fill
@@ -413,7 +414,6 @@ viewTask style selected task =
         ]
         [ paragraph [ width fill ] [ text task.text ]
         , tags
-        , text (Maybe.withDefault "No project" task.project)
         ]
 
 
