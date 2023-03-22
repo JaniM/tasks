@@ -123,6 +123,11 @@ handleMainInput msg model =
             switchProject project newModel
                 |> Cmd.withNoCmd
 
+        Tasks.MainInput.Edited taskId text tags ->
+            { newModel | viewState = None }
+                |> Model.updateTask (\t -> { t | text = text, tags = tags }) taskId
+                |> Cmd.withNoCmd
+
 
 {-| Removes the given task.
 -}
@@ -179,25 +184,29 @@ loadModel m model =
 
 {-| Sets the view state and updates global statd accordingly.
 -}
-setViewState : ViewState -> Model -> Model
+setViewState : ViewState -> Model -> ( Model, Cmd Msg )
 setViewState state model =
     case state of
         None ->
             { model | viewState = state }
+                |> Cmd.withNoCmd
 
         Selected _ _ ->
             { model | viewState = state }
+                |> Cmd.withNoCmd
 
         ShowDone ->
             { model | viewState = state }
+                |> Cmd.withNoCmd
 
-        Edit _ ->
-            Debug.todo ""
+        Edit task ->
+            { model | viewState = state }
+                |> handleMainInput (Tasks.MainInput.StartEditing task)
 
 
 {-| Select a task. Keeps note of view state hierarchy.
 -}
-selectTask : TaskId -> Model -> Model
+selectTask : TaskId -> Model -> ( Model, Cmd Msg )
 selectTask id model =
     let
         oldState : ViewState
@@ -283,10 +292,10 @@ handleMsg msg =
             Cmd.withNoCmd << loadModel m
 
         SetViewState state ->
-            Cmd.withNoCmd << setViewState state
+            setViewState state
 
         SelectTask id ->
-            Cmd.withNoCmd << selectTask id
+            selectTask id
 
         FocusInput ->
             onlyCmd <| always focusInput

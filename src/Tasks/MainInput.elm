@@ -21,14 +21,28 @@ import Maybe.Extra as Maybe
 import Set exposing (Set)
 import Tasks.Input exposing (parseInput, projectPrefix, searchPrefix)
 import Tasks.Style exposing (Style, paddingScale)
-import Tasks.Task exposing (SearchRule)
+import Tasks.Task exposing (SearchRule, Task, TaskId)
 import Tasks.Utils exposing (findCommonPrefix, findMatchingPrefix, listOfOne, mapFirst)
 
 
-type alias DefaultState =
-    { text : String
-    , tagSuggestions : Maybe (List String)
+type alias CommonState a =
+    { a
+        | text : String
+        , tagSuggestions : Maybe (List String)
     }
+
+
+type alias DefaultState =
+    CommonState {}
+
+
+type alias EditState =
+    CommonState { taskId : String }
+
+
+type Model
+    = Default DefaultState
+    | Edit EditState
 
 
 type alias Global =
@@ -38,14 +52,11 @@ type alias Global =
     }
 
 
-type Model
-    = Default DefaultState
-
-
 type Msg
     = SetText String
     | SubmitInput
     | Tabfill
+    | StartEditing Task
 
 
 type Event
@@ -53,6 +64,7 @@ type Event
     | AddTask String (List String)
     | SetSearch SearchRule
     | SetProject String
+    | Edited TaskId String (List String)
 
 
 defaultModel : Model
@@ -94,6 +106,9 @@ projectSearch model =
                 _ ->
                     Nothing
 
+        _ ->
+            Nothing
+
 
 handleMainInput : DefaultState -> ( DefaultState, Event )
 handleMainInput state =
@@ -111,12 +126,22 @@ handleMainInput state =
             ( state, None )
 
 
+handleMainInputEdit : EditState -> ( Model, Event )
+handleMainInputEdit state =
+    case parseInput state.text of
+        Ok (Tasks.Input.Text text tags) ->
+            ( Default defaultState, Edited state.taskId text tags )
+
+        _ ->
+            ( Edit state, None )
+
+
 {-| Complete the last tag in the current query.
 Depenss on Model.tagSuggestions to be calculated properly.
 `tags` should be the list of tags currently in the query.
 Note: currently we reorder tags to appear after other content.
 -}
-tabfillTag : Global -> DefaultState -> List String -> List String -> ( DefaultState, Event )
+tabfillTag : Global -> CommonState s -> List String -> List String -> ( CommonState s, Event )
 tabfillTag global state tags textBeforeTags =
     let
         tagMatching : Maybe String
@@ -133,7 +158,7 @@ tabfillTag global state tags textBeforeTags =
                         init =
                             List.init tags |> Maybe.unwrap [] identity
                     in
-                    textBeforeTags ++ init ++ [ newTag ]
+                    (textBeforeTags ++ init ++ [ newTag ])
                         |> List.map String.trim
                         |> String.join " "
                         |> (\x -> x ++ " ")
@@ -141,24 +166,24 @@ tabfillTag global state tags textBeforeTags =
                 Nothing ->
                     state.text
     in
-    setText global newText state
+    setTextDefault global newText state
 
 
 {-| Perform tab completion for the main input field.
 -}
-tabfill : Global -> DefaultState -> ( DefaultState, Event )
+tabfill : Global -> CommonState s -> ( CommonState s, Event )
 tabfill global state =
     case parseInput state.text of
         Ok (Tasks.Input.Text text tags) ->
             if String.startsWith text projectPrefix then
-                setText global projectPrefix state
+                setTextDefault global projectPrefix state
 
             else if String.startsWith text searchPrefix then
-                setText
+                setTextDefault
                     global
                     (Maybe.unwrap
                         searchPrefix
-                        (\p -> searchPrefix ++ p ++ " ")
+                        (\p -> searchPrefix ++ "#" ++ p ++ " ")
                         global.project
                     )
                     state
@@ -174,7 +199,7 @@ tabfill global state =
                         |> findCommonPrefix
                         |> Maybe.withDefault text
             in
-            setText global (projectPrefix ++ prefix) state
+            setTextDefault global (projectPrefix ++ prefix) state
 
         Ok (Tasks.Input.Search rule) ->
             tabfillTag
@@ -187,26 +212,26 @@ tabfill global state =
             ( state, None )
 
 
-setText : Global -> String -> DefaultState -> ( DefaultState, Event )
-setText global s state =
-    let
-        tagsMatchingLast : List String -> Maybe (List String)
-        tagsMatchingLast tags =
-            List.last tags
-                |> Maybe.map (findMatchingTags global.tags)
-    in
+tagsMatchingLast : Global -> List String -> Maybe (List String)
+tagsMatchingLast global tags =
+    List.last tags
+        |> Maybe.map (findMatchingTags global.tags)
+
+
+setTextDefault : Global -> String -> CommonState s -> ( CommonState s, Event )
+setTextDefault global s state =
     case parseInput s of
         Ok (Tasks.Input.Search rule) ->
             { state
                 | text = s
-                , tagSuggestions = tagsMatchingLast rule.tags
+                , tagSuggestions = tagsMatchingLast global rule.tags
             }
                 |> withEvent (SetSearch rule)
 
         Ok (Tasks.Input.Text _ tags) ->
             { state
                 | text = s
-                , tagSuggestions = tagsMatchingLast tags
+                , tagSuggestions = tagsMatchingLast global tags
             }
                 |> withNoEvent
 
@@ -218,17 +243,66 @@ setText global s state =
                 |> withNoEvent
 
 
-updateDefault : Global -> Msg -> DefaultState -> ( DefaultState, Event )
+setTextEdit : Global -> String -> EditState -> ( EditState, Event )
+setTextEdit global s state =
+    case parseInput s of
+        Ok (Tasks.Input.Text _ tags) ->
+            { state
+                | text = s
+                , tagSuggestions = tagsMatchingLast global tags
+            }
+                |> withNoEvent
+
+        _ ->
+            state
+                |> withNoEvent
+
+
+editTask : Task -> Model
+editTask task =
+    Edit
+        { text = String.join " " (task.text :: task.tags)
+        , tagSuggestions = Nothing
+        , taskId = task.id
+        }
+
+
+updateDefault : Global -> Msg -> DefaultState -> ( Model, Event )
 updateDefault global msg state =
     case msg of
         SetText text ->
-            setText global text state
+            setTextDefault global text state
+                |> mapFirst Default
 
         SubmitInput ->
             handleMainInput state
+                |> mapFirst Default
 
         Tabfill ->
             tabfill global state
+                |> mapFirst Default
+
+        StartEditing task ->
+            editTask task
+                |> withNoEvent
+
+
+updateEdit : Global -> Msg -> EditState -> ( Model, Event )
+updateEdit global msg state =
+    case msg of
+        SetText text ->
+            setTextEdit global text state
+                |> mapFirst Edit
+
+        SubmitInput ->
+            handleMainInputEdit state
+
+        Tabfill ->
+            tabfill global state
+                |> mapFirst Edit
+
+        StartEditing _ ->
+            Debug.todo ""
 
 
 update : Global -> Msg -> Model -> ( Model, Event )
@@ -236,7 +310,9 @@ update global msg model =
     case model of
         Default state ->
             updateDefault global msg state
-                |> mapFirst Default
+
+        Edit state ->
+            updateEdit global msg state
 
 
 
@@ -249,8 +325,11 @@ view style model =
         Default state ->
             viewTaskInput style state
 
+        Edit state ->
+            viewTaskInput style state
 
-viewTaskInput : Style -> DefaultState -> Element Msg
+
+viewTaskInput : Style -> CommonState s -> Element Msg
 viewTaskInput style model =
     let
         tagline : List String -> Element Msg
