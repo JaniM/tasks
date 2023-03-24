@@ -6,7 +6,6 @@ module Tasks.Utils exposing
     , groupByKey
     , intModular
     , listOfOne
-    , mapFirst
     )
 
 import Element
@@ -50,11 +49,6 @@ listOfOne list =
 
         _ ->
             Nothing
-
-
-mapFirst : (a -> c) -> ( a, b ) -> ( c, b )
-mapFirst f ( a, b ) =
-    ( f a, b )
 
 
 findMatchingPrefix : String -> List String -> List String

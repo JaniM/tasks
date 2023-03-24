@@ -2,15 +2,14 @@ module Tasks.Behavior exposing (Update, update)
 
 import Browser.Dom
 import Cmd.Extra as Cmd
-import Dict
 import Maybe.Extra as Maybe
 import Prng.Uuid
 import Random.Pcg.Extended as Pcg
-import Set exposing (Set)
 import Task
 import Tasks.Interop as Interop
 import Tasks.MainInput
 import Tasks.Model as Model exposing (Model, Msg(..), ViewState(..))
+import Tasks.Store as Store
 import Tasks.Style exposing (darkStyle, lightStyle)
 import Tasks.Task exposing (SearchRule, Task, TaskId, emptySwarch, searchProject)
 import Tasks.Utils exposing (choose)
@@ -32,7 +31,7 @@ addTaskToModel createTask model =
     in
     { model
         | seed = seed
-        , tasks = Dict.insert id (createTask id) model.tasks
+        , store = Store.addTask (createTask id) model.store
     }
 
 
@@ -85,7 +84,7 @@ handleMainInput msg model =
         global =
             { projects = model.projects
             , project = model.project
-            , tags = model.tags
+            , tags = model.store.tags.data
             }
 
         ( input, event ) =
@@ -137,7 +136,7 @@ handleMainInput msg model =
 -}
 removeTask : TaskId -> Model -> Model
 removeTask id model =
-    { model | tasks = Dict.remove id model.tasks }
+    { model | store = Store.removeTask id model.store }
 
 
 {-| Toggle between dark and light style.
@@ -181,31 +180,41 @@ deleteProject target model =
 loadModel : Model.StoredModel -> Model -> Model
 loadModel m model =
     { model
-        | tasks = m.tasks
+        | store = Store.loadTasks m.tasks model.store
         , projects = m.projects
     }
+
+
+sortRuleByState : ViewState -> Task -> Int
+sortRuleByState v =
+    case v of
+        Selected _ x ->
+            sortRuleByState x
+
+        ShowDone ->
+            negate << Maybe.unwrap 0 Time.posixToMillis << .doneAt
+
+        _ ->
+            negate << Time.posixToMillis << .createdAt
 
 
 {-| Sets the view state and updates global statd accordingly.
 -}
 setViewState : ViewState -> Model -> ( Model, Cmd Msg )
 setViewState state model =
+    let
+        newModel =
+            { model
+                | viewState = state
+                , store = Store.updateSort (sortRuleByState state) model.store
+            }
+    in
     case state of
-        None ->
-            { model | viewState = state }
-                |> Cmd.withNoCmd
-
-        Selected _ _ ->
-            { model | viewState = state }
-                |> Cmd.withNoCmd
-
-        ShowDone ->
-            { model | viewState = state }
-                |> Cmd.withNoCmd
-
         Edit task ->
-            { model | viewState = state }
-                |> handleMainInput (Tasks.MainInput.StartEditing task)
+            newModel |> handleMainInput (Tasks.MainInput.StartEditing task)
+
+        _ ->
+            newModel |> Cmd.withNoCmd
 
 
 {-| Select a task. Keeps note of view state hierarchy.
@@ -346,33 +355,9 @@ disableIf pred mw f msg =
         mw f msg
 
 
-{-| Updates the filteredTasks list and the tag set _exhaustively_.
-This will check every single task. Slow, but works for now. :clueless:
--}
-updateFilteredTasks : Model -> Model
-updateFilteredTasks model =
+applySearchToStore : Model -> Model
+applySearchToStore model =
     let
-        sortRule : ViewState -> Task -> Int
-        sortRule v =
-            case v of
-                Selected _ x ->
-                    sortRule x
-
-                ShowDone ->
-                    negate << Maybe.unwrap 0 Time.posixToMillis << .doneAt
-
-                _ ->
-                    negate << Time.posixToMillis << .createdAt
-
-        -- TODO: This is a temporary hack.
-        -- It is highly unwise to go over every single task for tags again and again.
-        tags : Set String
-        tags =
-            Dict.toList model.tasks
-                |> List.map Tuple.second
-                |> List.concatMap .tags
-                |> Set.fromList
-
         search : SearchRule
         search =
             case ( model.search, model.project ) of
@@ -384,38 +369,29 @@ updateFilteredTasks model =
 
                 ( Nothing, Nothing ) ->
                     emptySwarch
-
-        filterTasks : List Task -> List Task
-        filterTasks =
-            Model.filterTasks
+    in
+    { model
+        | store =
+            Store.updateFilter
                 { done = Model.showDoneTasks model.viewState
                 , search = search
                 }
-    in
-    { model
-        | filteredTasks =
-            Dict.toList model.tasks
-                |> List.map Tuple.second
-                |> filterTasks
-                |> List.sortBy (sortRule model.viewState)
-        , tags = tags
+                model.store
     }
 
 
-{-| Middleware to apply filtdrs after update.
--}
-filterTasksAfterUpdate : Update -> Update
-filterTasksAfterUpdate =
+updateFiltersAfterUpdate : Update -> Update
+updateFiltersAfterUpdate =
     executeIfChanged
-        (\m -> ( m.tasks, m.project, ( Model.showDoneTasks m.viewState, m.search ) ))
-        (Cmd.withNoCmd << updateFilteredTasks)
+        (\m -> ( m.project, m.search, Model.showDoneTasks m.viewState ))
+        (Cmd.withNoCmd << applySearchToStore)
 
 
 {-| Middleware to save tasks after update.
 -}
 saveChangedTasks : Update -> Update
 saveChangedTasks =
-    executeIfChanged (\m -> ( m.tasks, m.projects )) (onlyCmd Interop.save)
+    executeIfChanged (\m -> ( m.store.tasks, m.projects )) (onlyCmd Interop.save)
         |> disableIf Model.isLoadModel
 
 
@@ -424,5 +400,5 @@ saveChangedTasks =
 update : Update
 update =
     handleMsg
-        |> filterTasksAfterUpdate
+        |> updateFiltersAfterUpdate
         |> saveChangedTasks

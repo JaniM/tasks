@@ -49,12 +49,11 @@ import Tasks.Interop as Interop
 import Tasks.MainInput
 import Tasks.Model as Model exposing (Model, Msg(..), ViewState(..), emptyModel)
 import Tasks.Style exposing (Style, paddingScale)
-import Tasks.Task exposing (Task)
+import Tasks.Task exposing (Task, searchProject)
 import Tasks.Utils exposing (choose, epoch, findMatchingPrefix, groupByKey)
 import Time
 import Time.Format
 import Time.Format.Config.Config_fi_fi
-import Tasks.Task exposing (searchProject)
 
 
 main : Program ( Int, List Int ) Model Msg
@@ -165,7 +164,7 @@ contentRow model =
     let
         listing : () -> Element Msg
         listing () =
-            case ( Tasks.MainInput.projectSearch model.mainInput, model.filteredTasks, model.project ) of
+            case ( Tasks.MainInput.projectSearch model.mainInput, model.store.filteredTasks.data, model.project ) of
                 ( Just text, _, _ ) ->
                     viewProjectSearch model text
 
@@ -188,7 +187,7 @@ contentRow model =
                     viewTaskEdit model task
 
                 ShowDone ->
-                    viewDoneTasksTimeline model.timeZone model.style model.viewState model.filteredTasks
+                    viewDoneTasksTimeline model.timeZone model.style model.viewState model.store.filteredTasks.data
     in
     row [ width fill, height fill, clip ]
         [ projectList model
@@ -226,7 +225,7 @@ projectCard model project =
         , onClick (SetProject False project)
         ]
         [ paragraph [ width fill ] [ text project ]
-        , Model.countTasks model.tasks { done = False, search = searchProject project }
+        , Model.countTasks model.store.tasks { done = False, search = searchProject project }
             |> String.fromInt
             |> text
         ]

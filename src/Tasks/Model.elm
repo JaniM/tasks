@@ -16,8 +16,8 @@ module Tasks.Model exposing
 import Dict exposing (Dict)
 import Maybe.Extra as Maybe
 import Random.Pcg.Extended as Pcg
-import Set exposing (Set)
 import Tasks.MainInput
+import Tasks.Store as Store exposing (Store)
 import Tasks.Style exposing (Style)
 import Tasks.Task exposing (SearchRule, Task, TaskId)
 import Time
@@ -34,10 +34,8 @@ type alias StoredModel =
 
 
 type alias Model =
-    { tasks : Dict String Task
-    , filteredTasks : List Task
+    { store : Store
     , projects : List String
-    , tags : Set String
     , project : Maybe String
     , seed : Pcg.Seed
     , style : Style
@@ -75,10 +73,8 @@ type Msg
 
 emptyModel : Model
 emptyModel =
-    { tasks = Dict.empty
-    , filteredTasks = []
+    { store = Store.emptyStore
     , projects = []
-    , tags = Set.empty
     , seed = Pcg.initialSeed 0 []
     , style = Tasks.Style.darkStyle
     , project = Nothing
@@ -173,7 +169,7 @@ countTasks tasks filter =
 
 updateTask : (Task -> Task) -> TaskId -> Model -> Model
 updateTask f id model =
-    { model | tasks = Dict.update id (Maybe.map f) model.tasks }
+    { model | store = Store.updateTask id f model.store }
 
 
 showDoneTasks : ViewState -> Bool

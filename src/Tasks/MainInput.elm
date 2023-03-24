@@ -18,11 +18,11 @@ import Json.Decode as D
 import Json.Decode.Extra as D
 import List.Extra as List
 import Maybe.Extra as Maybe
-import Set exposing (Set)
 import Tasks.Input exposing (parseInput, projectPrefix, searchPrefix)
 import Tasks.Style exposing (Style, paddingScale)
 import Tasks.Task exposing (SearchRule, Task, TaskId)
-import Tasks.Utils exposing (findCommonPrefix, findMatchingPrefix, listOfOne, mapFirst)
+import Tasks.Utils exposing (findCommonPrefix, findMatchingPrefix, listOfOne)
+import Tuple exposing (mapFirst)
 
 
 type alias CommonState a =
@@ -46,7 +46,7 @@ type Model
 
 
 type alias Global =
-    { tags : Set String
+    { tags : List String
     , projects : List String
     , project : Maybe String
     }
@@ -78,12 +78,10 @@ defaultState =
     { text = "", tagSuggestions = Nothing }
 
 
-findMatchingTags : Set String -> String -> List String
+findMatchingTags : List String -> String -> List String
 findMatchingTags tags tag =
     tags
-        |> Set.filter (String.startsWith tag)
-        |> Set.toList
-        |> List.sort
+        |> List.filter (String.startsWith tag)
 
 
 withEvent : Event -> a -> ( a, Event )
