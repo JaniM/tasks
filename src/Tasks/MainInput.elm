@@ -65,6 +65,7 @@ type Event
     | SetSearch SearchRule
     | SetProject String
     | Edited TaskId String (List String)
+    | Error String
 
 
 defaultModel : Model
@@ -302,7 +303,10 @@ updateEdit global msg state =
                 |> mapFirst Edit
 
         StartEditing _ ->
-            Debug.todo ""
+            -- This should be unreachable. In case we do reach it, report an error.
+            ( Edit state
+            , Error "Reached unreachable case: MainInput.updateEdit"
+            )
 
 
 update : Global -> Msg -> Model -> ( Model, Event )
@@ -331,42 +335,49 @@ view style model =
 
 viewTaskInput : Style -> CommonState s -> Element Msg
 viewTaskInput style model =
-    let
-        tagline : List String -> Element Msg
-        tagline tags =
-            wrappedRow [ width fill, padding (paddingScale 2), spacing (paddingScale 2) ]
-                (List.map Element.text tags)
-
-        suggestions : Element Msg
-        suggestions =
-            case model.tagSuggestions of
-                Just [ tag ] ->
-                    -- TODO: this is a hack
-                    if String.contains (" " ++ tag) model.text then
-                        Element.none
-
-                    else
-                        tagline [ tag ]
-
-                Just tags ->
-                    tagline tags
-
-                Nothing ->
-                    Element.none
-    in
     el [ width fill, padding (paddingScale 2) ] <|
         Element.Input.text
             [ onKeys [ ( "Enter", SubmitInput ), ( "Tab", Tabfill ) ]
             , Background.color style.taskBackground
             , Element.Input.focusedOnLoad
             , Html.Attributes.id "input" |> Element.htmlAttribute
-            , Element.below suggestions
+            , Element.below (tagSuggestionsBox style model)
             ]
             { onChange = SetText
             , text = model.text
             , placeholder = Just (Element.Input.placeholder [] (Element.text "Add task"))
             , label = Element.Input.labelHidden "Add task"
             }
+
+
+tagline : Style -> List String -> Element Msg
+tagline style tags =
+    wrappedRow
+        [ width fill
+        , padding (paddingScale 2)
+        , spacing (paddingScale 2)
+        , Element.moveDown 5
+        , Background.color style.background
+        ]
+        (List.map Element.text tags)
+
+
+tagSuggestionsBox : Style -> CommonState s -> Element Msg
+tagSuggestionsBox style state =
+    case state.tagSuggestions of
+        Just [ tag ] ->
+            -- TODO: this is a hack
+            if String.contains (" " ++ tag) state.text then
+                Element.none
+
+            else
+                tagline style [ tag ]
+
+        Just tags ->
+            tagline style tags
+
+        Nothing ->
+            Element.none
 
 
 onKeys : List ( String, msg ) -> Attribute msg

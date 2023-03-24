@@ -128,6 +128,10 @@ handleMainInput msg model =
                 |> Model.updateTask (\t -> { t | text = text, tags = tags }) taskId
                 |> Cmd.withNoCmd
 
+        Tasks.MainInput.Error err ->
+            newModel
+                |> Cmd.withCmd (Interop.log err)
+
 
 {-| Removes the given task.
 -}

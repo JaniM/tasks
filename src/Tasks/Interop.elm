@@ -1,12 +1,12 @@
 port module Tasks.Interop exposing
     ( FromJs(..)
     , load
+    , log
     , save
     , subscribe
     )
 
 import Dict exposing (Dict)
-import Json.Decode as D
 import Json.Decode as D
 import Json.Encode as E
 import Json.Encode.Extra as E
@@ -16,8 +16,7 @@ import Tasks.Task exposing (Task, TaskId)
 import Time
 
 
-
--- port log : String -> Cmd msg
+port log : String -> Cmd msg
 
 
 port requestJs : E.Value -> Cmd msg
