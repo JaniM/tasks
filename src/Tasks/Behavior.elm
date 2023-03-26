@@ -6,6 +6,7 @@ import Maybe.Extra as Maybe
 import Prng.Uuid
 import Random.Pcg.Extended as Pcg
 import Task
+import Tasks.Counter as Counter
 import Tasks.Interop as Interop
 import Tasks.MainInput
 import Tasks.Model as Model exposing (Model, Msg(..), ViewState(..))
@@ -84,7 +85,7 @@ handleMainInput msg model =
         global =
             { projects = model.projects
             , project = model.project
-            , tags = model.store.tags.data
+            , tags = Counter.list model.store.tags
             }
 
         ( input, event ) =

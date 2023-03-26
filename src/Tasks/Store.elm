@@ -13,6 +13,7 @@ import Dict exposing (Dict)
 import List.Extra
 import Maybe.Extra as Maybe
 import Set exposing (Set)
+import Tasks.Counter as Counter
 import Tasks.Task exposing (SearchRule, Task, TaskId, emptySwarch)
 import Time
 
@@ -85,11 +86,6 @@ add item aggregate =
         aggregate
 
 
-addMany : List a -> Aggregate a comparable -> Aggregate a comparable
-addMany items aggregate =
-    List.foldl add aggregate items
-
-
 remove : comparable -> Aggregate a comparable -> Aggregate a comparable
 remove key aggregate =
     if Set.member key aggregate.contained then
@@ -153,7 +149,7 @@ replaceinList pred item list =
 type alias Store =
     { tasks : Dict TaskId Task
     , filteredTasks : Aggregate Task TaskId
-    , tags : Aggregate String String
+    , tags : Counter.Counter String
     }
 
 
@@ -170,12 +166,6 @@ filterAggregate =
         |> withFilter (filterTask { done = False, search = emptySwarch }) []
 
 
-tagAggregate : Aggregate String String
-tagAggregate =
-    emptyAggregate identity
-        |> withSort List.sort
-
-
 updateSort : (Task -> Int) -> Store -> Store
 updateSort sorter model =
     { model | filteredTasks = withSort (List.sortBy sorter) model.filteredTasks }
@@ -185,7 +175,7 @@ emptyStore : Store
 emptyStore =
     { tasks = Dict.empty
     , filteredTasks = filterAggregate
-    , tags = tagAggregate
+    , tags = Counter.empty
     }
 
 
@@ -194,18 +184,17 @@ loadTasks tasks model =
     let
         all : List Task
         all =
-            Dict.toList tasks |> List.map Tuple.second
+            Dict.values tasks
 
         tags : List String
         tags =
-            Dict.toList tasks
-                |> List.map Tuple.second
+            Dict.values tasks
                 |> List.concatMap .tags
     in
     { model
         | tasks = tasks
         , filteredTasks = reset all model.filteredTasks
-        , tags = reset tags model.tags
+        , tags = Counter.addMany tags Counter.empty
     }
 
 
@@ -214,15 +203,21 @@ addTask task model =
     { model
         | tasks = Dict.insert task.id task model.tasks
         , filteredTasks = add task model.filteredTasks
-        , tags = addMany task.tags model.tags
+        , tags = Counter.addMany task.tags model.tags
     }
 
 
 removeTask : TaskId -> Store -> Store
 removeTask taskId model =
+    let
+        tags =
+            Dict.get taskId model.tasks
+                |> Maybe.unwrap [] .tags
+    in
     { model
         | tasks = Dict.remove taskId model.tasks
         , filteredTasks = remove taskId model.filteredTasks
+        , tags = Counter.removwMany tags model.tags
     }
 
 
@@ -243,7 +238,10 @@ updateTask id updater model =
             { model
                 | tasks = newTasks
                 , filteredTasks = update newTask model.filteredTasks
-                , tags = addMany newTask.tags model.tags
+                , tags =
+                    model.tags
+                        |> Counter.removwMany task.tags
+                        |> Counter.addMany task.tags
             }
 
 
@@ -261,8 +259,7 @@ updateFilter rule model =
 allTasks : Store -> List Task
 allTasks model =
     model.tasks
-        |> Dict.toList
-        |> List.map Tuple.second
+        |> Dict.values
 
 
 filterTaskByTags : List String -> Task -> Bool

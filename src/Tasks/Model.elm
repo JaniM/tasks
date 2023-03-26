@@ -161,8 +161,7 @@ filterTasks filter tasks =
 countTasks : Dict k Task -> Filter -> Int
 countTasks tasks filter =
     tasks
-        |> Dict.toList
-        |> List.map Tuple.second
+        |> Dict.values
         |> filterTasks filter
         |> List.length
 
