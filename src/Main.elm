@@ -47,7 +47,8 @@ import Task
 import Tasks.Behavior
 import Tasks.Interop as Interop
 import Tasks.MainInput
-import Tasks.Model as Model exposing (Model, Msg(..), ViewState(..), emptyModel)
+import Tasks.Model exposing (Model, Msg(..), ViewState(..), emptyModel)
+import Tasks.Store as Store
 import Tasks.Style exposing (Style, paddingScale)
 import Tasks.Task exposing (Task, searchProject)
 import Tasks.Utils exposing (choose, epoch, findMatchingPrefix, groupByKey)
@@ -225,7 +226,7 @@ projectCard model project =
         , onClick (SetProject False project)
         ]
         [ paragraph [ width fill ] [ text project ]
-        , Model.countTasks model.store.tasks { done = False, search = searchProject project }
+        , Store.countTasks model.store { done = False, search = searchProject project }
             |> String.fromInt
             |> text
         ]

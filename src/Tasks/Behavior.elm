@@ -204,6 +204,7 @@ sortRuleByState v =
 setViewState : ViewState -> Model -> ( Model, Cmd Msg )
 setViewState state model =
     let
+        newModel : Model
         newModel =
             { model
                 | viewState = state

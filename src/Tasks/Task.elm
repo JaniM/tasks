@@ -2,10 +2,12 @@ module Tasks.Task exposing
     ( SearchRule
     , Task
     , TaskId
-    , searchProject
     , emptySwarch
+    , emptyTask
+    , searchProject
     )
 
+import Tasks.Utils exposing (epoch)
 import Time
 
 
@@ -27,11 +29,19 @@ type alias Task =
     , id : TaskId
     }
 
+
 searchProject : String -> SearchRule
 searchProject tag =
-    { tags = ["#" ++ tag]
+    { tags = [ "#" ++ tag ]
     , snippets = []
     }
 
+
 emptySwarch : SearchRule
-emptySwarch = { snippets = [], tags = [] }
+emptySwarch =
+    { snippets = [], tags = [] }
+
+
+emptyTask : Task
+emptyTask =
+    Task "" [] epoch Nothing ""

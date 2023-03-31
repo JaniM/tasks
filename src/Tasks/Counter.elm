@@ -1,4 +1,4 @@
-module Tasks.Counter exposing (..)
+module Tasks.Counter exposing (Counter, addMany, empty, list, removeMany)
 
 import Dict exposing (Dict)
 import Maybe.Extra as Maybe
@@ -41,8 +41,8 @@ remove key counter =
     Dict.update key updater counter
 
 
-removwMany : List comparable -> Counter comparable -> Counter comparable
-removwMany keys counter =
+removeMany : List comparable -> Counter comparable -> Counter comparable
+removeMany keys counter =
     List.foldl remove counter keys
 
 
