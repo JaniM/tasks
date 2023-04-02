@@ -379,6 +379,7 @@ applySearchToStore model =
                 , search = search
                 }
                 model.store
+                |> Store.updateSort (sortRuleByState model.viewState)
     }
 
 
