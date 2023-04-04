@@ -110,8 +110,8 @@ removeTask taskId model =
     }
 
 
-updateTask : TaskId -> (Task -> Task) -> Store -> Store
-updateTask id updater model =
+updateTask : (Task -> Task) -> TaskId -> Store -> Store
+updateTask updater id model =
     case Dict.get id model.tasks.data of
         Nothing ->
             model

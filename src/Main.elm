@@ -21,6 +21,7 @@ import Element
         , htmlAttribute
         , layout
         , padding
+        , paddingEach
         , paragraph
         , px
         , rgba
@@ -72,13 +73,14 @@ init ( seed, seedExtension ) =
     ( { emptyModel | seed = Pcg.initialSeed seed seedExtension }
     , Cmd.batch
         [ Interop.load
-        , Task.perform SetTimeZone Time.here
+        , Task.map2 SetTime Time.here Time.now
+            |> Task.perform identity
         ]
     )
 
 
 subscriptions : Model -> Sub Msg
-subscriptions _ =
+subscriptions model =
     let
         interopHandler : Interop.FromJs -> Msg
         interopHandler fromJs =
@@ -92,6 +94,7 @@ subscriptions _ =
     Sub.batch
         [ Interop.subscribe interopHandler
         , Browser.Events.onKeyDown (D.succeed FocusInput)
+        , Time.every (60 * 1000) (SetTime model.timeZone)
         ]
 
 
@@ -177,8 +180,12 @@ showDoneButton style current =
 
 
 contentRow : Model -> Element Msg
-contentRow model =
+contentRow ({ style } as model) =
     let
+        styleWithTime : Style
+        styleWithTime =
+            { style | currentTime = model.currentTime, timeZone = model.timeZone }
+
         listing : Model.ListState -> Element Msg
         listing state =
             case ( Tasks.MainInput.projectSearch model.mainInput, model.store.filteredTasks.data, state.project ) of
@@ -195,10 +202,10 @@ contentRow model =
         selectList state filteredTasks =
             case state.kind of
                 Model.Undone ->
-                    Element.Lazy.lazy3 viewTasks model.style state filteredTasks
+                    Element.Lazy.lazy3 viewTasks styleWithTime state filteredTasks
 
                 Model.Done ->
-                    viewDoneTasksTimeline model.timeZone model.style state model.store.filteredTasks.data
+                    viewDoneTasksTimeline model.timeZone styleWithTime state model.store.filteredTasks.data
 
         pane : ViewState -> Element Msg
         pane state =
@@ -321,6 +328,15 @@ viewEmptyProject style project =
             ]
 
 
+justIf : Bool -> (() -> a) -> Maybe a
+justIf b f =
+    if b then
+        Just (f ())
+
+    else
+        Nothing
+
+
 viewTasks : Style -> Model.ListState -> List Task -> Element Msg
 viewTasks style state tasks =
     let
@@ -329,15 +345,51 @@ viewTasks style state tasks =
             ( task.id
             , viewTask style (state.selected == Just task.id) task
             )
+
+        ( picked, unpicked ) =
+            List.partition (\t -> Maybe.isJust t.pickedAt) tasks
+
+        ( onTime, late ) =
+            List.partition (\t -> equalDate style.timeZone (Maybe.unwrap epoch identity t.pickedAt) style.currentTime) picked
+
+        pickedColumn : List ( String, Element Msg ) -> Element Msg
+        pickedColumn =
+            Element.Keyed.column
+                [ width fill
+                , spacing (paddingScale 2)
+                , paddingEach { bottom = paddingScale 2, left = 0, right = 0, top = 0 }
+                , Element.Border.widthEach { bottom = 1, left = 0, right = 0, top = 0 }
+                ]
+
+        lateElem : Maybe (Element Msg)
+        lateElem =
+            justIf (List.isEmpty late |> not)
+                (\_ -> pickedColumn (List.map task_ late))
+
+        onTimeElem : Maybe (Element Msg)
+        onTimeElem =
+            justIf (List.isEmpty onTime |> not)
+                (\_ -> pickedColumn (List.map task_ onTime))
+
+        unpickedElem : Maybe (Element Msg)
+        unpickedElem =
+            justIf (List.isEmpty unpicked |> not)
+                (\_ ->
+                    Element.Keyed.column
+                        [ width fill
+                        , spacing (paddingScale 2)
+                        ]
+                        (List.map task_ unpicked)
+                )
     in
-    Element.Keyed.column
+    Element.column
         [ width fill
         , height fill
         , spacing (paddingScale 2)
         , padding (paddingScale 2)
         , scrollbarY
         ]
-        (List.map task_ tasks)
+        (List.filterMap identity [ lateElem, onTimeElem, unpickedElem ])
 
 
 taskDropdown : Style -> Task -> Element Msg
@@ -360,10 +412,17 @@ taskDropdown style task =
 
         done : Element Msg
         done =
-            button
-                { onPress = Just (MarkDone task.id)
-                , label = text "Done"
-                }
+            if Maybe.isJust task.doneAt then
+                button
+                    { onPress = Just (MarkDone task.id)
+                    , label = text "Unmark Done"
+                    }
+
+            else
+                button
+                    { onPress = Just (MarkDone task.id)
+                    , label = text "Done"
+                    }
 
         edit : Element Msg
         edit =
@@ -376,6 +435,45 @@ taskDropdown style task =
                 { onPress = Nothing
                 , label = text "Edit"
                 }
+
+        pick : Maybe (Element Msg)
+        pick =
+            if pickedOnDifferentDate style task then
+                Just
+                    (button
+                        { onPress = Just (PickTask task.id True)
+                        , label = text "Repick"
+                        }
+                    )
+
+            else if Maybe.isJust task.pickedAt then
+                Nothing
+
+            else
+                Just
+                    (button
+                        { onPress = Just (PickTask task.id True)
+                        , label = text "Pick"
+                        }
+                    )
+
+        unpick : Maybe (Element Msg)
+        unpick =
+            justIf (Maybe.isJust task.pickedAt)
+                (\_ ->
+                    button
+                        { onPress = Just (PickTask task.id False)
+                        , label = text "Unpick"
+                        }
+                )
+        
+        buttons : List (Maybe (Element Msg))
+        buttons =
+            if Maybe.isJust task.doneAt then
+                [ Just done, Just edit, Just remove ]
+
+            else
+                [ pick, unpick, Just done, Just edit, Just remove ]
     in
     row
         [ Background.color style.taskBackground
@@ -383,7 +481,7 @@ taskDropdown style task =
         , padding (paddingScale 2)
         , spacing (paddingScale 2)
         ]
-        [ done, edit, remove ]
+        (List.filterMap identity buttons)
 
 
 viewTask : Style -> Bool -> Task -> Element Msg
@@ -401,6 +499,9 @@ viewTask style selected task =
         color =
             if Maybe.isJust task.doneAt then
                 style.doneBackground
+
+            else if pickedOnDifferentDate style task then
+                style.lateBackground
 
             else if selected then
                 style.buttonBackground
@@ -424,6 +525,12 @@ viewTask style selected task =
         [ paragraph [ width fill ] [ text task.text ]
         , tags
         ]
+
+
+pickedOnDifferentDate : Style -> Task -> Bool
+pickedOnDifferentDate style task =
+    Maybe.map (not << equalDate style.timeZone style.currentTime) task.pickedAt
+        |> Maybe.withDefault False
 
 
 viewDoneTasksTimeline : Time.Zone -> Style -> Model.ListState -> List Task -> Element Msg

@@ -208,10 +208,10 @@ sortRuleByState v =
 
         ListTasks { kind } ->
             case kind of
-                Model.Undone ->
+                Model.Done ->
                     negate << Maybe.unwrap 0 Time.posixToMillis << .doneAt
 
-                Model.Done ->
+                Model.Undone ->
                     negate << Time.posixToMillis << .createdAt
 
 
@@ -297,9 +297,25 @@ focusInput =
 
 {-| Sets the time zone. This will only be run once on startup.
 -}
-setTimeZone : Time.Zone -> Model -> Model
-setTimeZone zone model =
-    { model | timeZone = zone }
+setTime : Time.Posix -> Time.Zone -> Model -> Model
+setTime time zone model =
+    { model | timeZone = zone, currentTime = time }
+
+
+pickTask : TaskId -> Bool -> Cmd Msg
+pickTask id picked =
+    let
+        updater : Time.Posix -> Task -> Task
+        updater time task =
+            { task
+                | pickedAt =
+                    choose
+                        (Just time)
+                        Nothing
+                        picked
+            }
+    in
+    withTime (UpdateTask id << updater)
 
 
 type alias Update =
@@ -344,7 +360,7 @@ handleMsg msg =
             onlyCmd <| always focusInput
 
         AddTask text tags time ->
-            Cmd.withNoCmd << addTaskToModel (Task text tags time Nothing)
+            Cmd.withNoCmd << addTaskToModel (Task text tags time Nothing Nothing)
 
         MarkDone taskId ->
             onlyCmd <| always <| markDone taskId
@@ -352,8 +368,11 @@ handleMsg msg =
         UpdateTask taskId f ->
             Cmd.withNoCmd << handleUpdateTask taskId f
 
-        SetTimeZone zone ->
-            Cmd.withNoCmd << setTimeZone zone
+        SetTime time zone ->
+            Cmd.withNoCmd << setTime zone time
+
+        PickTask id add ->
+            onlyCmd <| always <| pickTask id add
 
         NoOp ->
             Cmd.withNoCmd

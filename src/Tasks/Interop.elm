@@ -109,6 +109,7 @@ encodeModel model =
                 , ( "tags", E.list E.string t.tags )
                 , ( "createdAt", encodeTime t.createdAt )
                 , ( "doneAt", E.maybe encodeTime t.doneAt )
+                , ( "pickedAt", E.maybe encodeTime t.pickedAt )
                 ]
     in
     E.object
@@ -122,11 +123,12 @@ decodeModel =
     let
         task : D.Decoder (TaskId -> Task)
         task =
-            D.map4 Task
+            D.map5 Task
                 (D.field "text" D.string)
                 (D.field "tags" (D.list D.string))
                 (D.field "createdAt" decodeTime)
                 (D.field "doneAt" (D.maybe decodeTime))
+                (D.field "pickedAt" (D.maybe decodeTime))
 
         tasks : D.Decoder (Dict String Task)
         tasks =

@@ -1,4 +1,4 @@
-module Reactive.List exposing (RList, Stepper, filter, fromDict, step, withPostStep, empty)
+module Reactive.List exposing (RList, Stepper, empty, filter, fromDict, step, withPostStep)
 
 import Dict
 import Reactive.Dict exposing (RDict, Step(..))
@@ -113,12 +113,17 @@ filterStepper pred key step_ state =
 replaceinList : (a -> Bool) -> a -> List a -> List a
 replaceinList pred item list =
     let
-        folder : a -> List a -> List a
-        folder x acc =
-            if pred x then
-                item :: acc
+        helper : List a -> List a -> List a
+        helper acc ls =
+            case ls of
+                [] ->
+                    List.reverse acc
 
-            else
-                x :: acc
+                x :: xs ->
+                    if pred x then
+                        List.reverse acc ++ (item :: xs)
+
+                    else
+                        helper (x :: acc) xs
     in
-    List.foldr folder [] list
+    helper [] list

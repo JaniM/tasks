@@ -22,10 +22,22 @@ type alias SearchRule =
 
 
 type alias Task =
-    { text : String
+    { -- Text of the task
+      text : String
+
+    -- Tags of the task
     , tags : List String
+
+    -- When the task was created
     , createdAt : Time.Posix
+
+    -- When the task was done
     , doneAt : Maybe Time.Posix
+
+    -- When the task was picked to be done
+    , pickedAt : Maybe Time.Posix
+
+    -- Id of the task
     , id : TaskId
     }
 
@@ -44,4 +56,10 @@ emptySwarch =
 
 emptyTask : Task
 emptyTask =
-    Task "" [] epoch Nothing ""
+    { text = ""
+    , tags = []
+    , createdAt = epoch
+    , doneAt = Nothing
+    , pickedAt = Nothing
+    , id = ""
+    }

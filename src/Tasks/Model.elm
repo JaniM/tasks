@@ -24,6 +24,7 @@ import Tasks.Store as Store exposing (Store)
 import Tasks.Style exposing (Style)
 import Tasks.Task exposing (SearchRule, Task, TaskId)
 import Time
+import Tasks.Utils exposing (epoch)
 
 
 type alias Tag =
@@ -37,12 +38,20 @@ type alias StoredModel =
 
 
 type alias Model =
-    { store : Store
+    { -- Task database
+      store : Store
+
+    -- List of all projects the user has created
     , projects : List String
+
+    -- Random number generator seed for generating IDs
     , seed : Pcg.Seed
     , style : Style
     , viewState : ViewState
+
+    -- Time zone for displaying dates
     , timeZone : Time.Zone
+    , currentTime : Time.Posix
     , search : Maybe SearchRule
     , mainInput : Tasks.MainInput.Model
     }
@@ -86,7 +95,8 @@ type Msg
     | SelectTask (Maybe TaskId)
     | StartEditing Task
     | FocusInput
-    | SetTimeZone Time.Zone
+    | SetTime Time.Zone Time.Posix
+    | PickTask TaskId Bool
     | NoOp
 
 
@@ -97,6 +107,7 @@ emptyModel =
     , seed = Pcg.initialSeed 0 []
     , style = Tasks.Style.darkStyle
     , viewState = ListTasks { project = Nothing, selected = Nothing, kind = Undone }
+    , currentTime = epoch
     , timeZone = Time.utc
     , search = Nothing
     , mainInput = Tasks.MainInput.defaultModel
@@ -115,7 +126,7 @@ isLoadModel msg =
 
 updateTask : (Task -> Task) -> TaskId -> Model -> Model
 updateTask f id model =
-    { model | store = Store.updateTask id f model.store }
+    { model | store = Store.updateTask f id model.store }
 
 
 showDoneTasks : ViewState -> Bool
