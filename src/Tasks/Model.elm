@@ -1,13 +1,20 @@
 module Tasks.Model exposing
-    ( Model
+    ( EditState
+    , ListKind(..)
+    , ListState
+    , Model
     , Msg(..)
     , StoredModel
     , Tag
     , ViewState(..)
     , emptyModel
+    , exitEdit
     , isLoadModel
+    , project
+    , selectedTask
     , showDoneTasks
     , updateTask
+    , viewListKind
     )
 
 import Dict exposing (Dict)
@@ -32,7 +39,6 @@ type alias StoredModel =
 type alias Model =
     { store : Store
     , projects : List String
-    , project : Maybe String
     , seed : Pcg.Seed
     , style : Style
     , viewState : ViewState
@@ -43,10 +49,26 @@ type alias Model =
 
 
 type ViewState
-    = None
-    | Selected TaskId ViewState
-    | Edit Task
-    | ShowDone
+    = ListTasks ListState
+    | Edit EditState
+
+
+type alias ListState =
+    { project : Maybe String
+    , selected : Maybe TaskId
+    , kind : ListKind
+    }
+
+
+type alias EditState =
+    { task : Task
+    , prev : ViewState
+    }
+
+
+type ListKind
+    = Undone
+    | Done
 
 
 type Msg
@@ -61,7 +83,8 @@ type Msg
     | DeleteProject String
     | LoadModel StoredModel
     | SetViewState ViewState
-    | SelectTask TaskId
+    | SelectTask (Maybe TaskId)
+    | StartEditing Task
     | FocusInput
     | SetTimeZone Time.Zone
     | NoOp
@@ -73,8 +96,7 @@ emptyModel =
     , projects = []
     , seed = Pcg.initialSeed 0 []
     , style = Tasks.Style.darkStyle
-    , project = Nothing
-    , viewState = None
+    , viewState = ListTasks { project = Nothing, selected = Nothing, kind = Undone }
     , timeZone = Time.utc
     , search = Nothing
     , mainInput = Tasks.MainInput.defaultModel
@@ -99,11 +121,63 @@ updateTask f id model =
 showDoneTasks : ViewState -> Bool
 showDoneTasks v =
     case v of
-        Selected _ x ->
-            showDoneTasks x
-
-        ShowDone ->
-            True
+        ListTasks { kind } ->
+            kind == Done
 
         _ ->
             False
+
+
+project : Model -> Maybe String
+project model =
+    viewProject model.viewState
+
+
+selectedTask : Model -> Maybe TaskId
+selectedTask model =
+    viewSelected model.viewState
+
+
+recurseViewState : ViewState -> ListState
+recurseViewState view =
+    case view of
+        Edit { prev } ->
+            recurseViewState prev
+
+        ListTasks state ->
+            state
+
+
+viewProject : ViewState -> Maybe String
+viewProject =
+    recurseViewState >> .project
+
+
+viewListKind : ViewState -> ListKind
+viewListKind =
+    recurseViewState >> .kind
+
+
+viewSelected : ViewState -> Maybe TaskId
+viewSelected view =
+    case view of
+        ListTasks state ->
+            state.selected
+
+        Edit _ ->
+            Nothing
+
+
+exitEdit : Model -> Model
+exitEdit model =
+    let
+        viewState : ViewState
+        viewState =
+            case model.viewState of
+                Edit { prev } ->
+                    prev
+
+                x ->
+                    x
+    in
+    { model | viewState = viewState }

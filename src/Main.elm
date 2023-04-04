@@ -47,7 +47,7 @@ import Task
 import Tasks.Behavior
 import Tasks.Interop as Interop
 import Tasks.MainInput
-import Tasks.Model exposing (Model, Msg(..), ViewState(..), emptyModel)
+import Tasks.Model as Model exposing (Model, Msg(..), ViewState(..), emptyModel)
 import Tasks.Store as Store
 import Tasks.Style exposing (Style, paddingScale)
 import Tasks.Task exposing (Task, searchProject)
@@ -103,21 +103,22 @@ leftBarWidth =
 view : Model -> Html Msg
 view model =
     let
-        newState : Msg
-        newState =
-            case model.viewState of
-                Selected _ n ->
-                    SetViewState n
+        attrs : List (Attribute Msg)
+        attrs =
+            case Model.selectedTask model of
+                Just _ ->
+                    [ onClick (SelectTask Nothing) ]
 
-                _ ->
-                    NoOp
+                Nothing ->
+                    []
     in
     layout
-        [ Background.color model.style.background
-        , Font.color model.style.textColor
-        , Font.size (model.style.textSize 1)
-        , onClick newState
-        ]
+        (attrs
+            ++ [ Background.color model.style.background
+               , Font.color model.style.textColor
+               , Font.size (model.style.textSize 1)
+               ]
+        )
         (topView model)
 
 
@@ -148,14 +149,29 @@ toggleStyleButton =
             }
 
 
+setKind : Model.ListKind -> Model.ViewState -> Model.ViewState
+setKind k v =
+    case v of
+        Model.Edit state ->
+            Model.Edit state
+
+        Model.ListTasks state ->
+            Model.ListTasks { state | kind = k }
+
+
 showDoneButton : Style -> ViewState -> Element Msg
 showDoneButton style current =
+    let
+        kind : Model.ListKind
+        kind =
+            Model.viewListKind current
+    in
     Input.button
         [ noFocusStyle
         , padding (paddingScale 1)
-        , Background.color (choose style.buttonBackground style.doneBackground (current /= ShowDone))
+        , Background.color (choose style.buttonBackground style.doneBackground (kind /= Model.Done))
         ]
-        { onPress = Just <| SetViewState <| choose None ShowDone (current == ShowDone)
+        { onPress = Just <| SetViewState <| setKind (choose Model.Undone Model.Done (kind == Model.Done)) current
         , label = text "Show Done"
         }
 
@@ -163,9 +179,9 @@ showDoneButton style current =
 contentRow : Model -> Element Msg
 contentRow model =
     let
-        listing : () -> Element Msg
-        listing () =
-            case ( Tasks.MainInput.projectSearch model.mainInput, model.store.filteredTasks.data, model.project ) of
+        listing : Model.ListState -> Element Msg
+        listing state =
+            case ( Tasks.MainInput.projectSearch model.mainInput, model.store.filteredTasks.data, state.project ) of
                 ( Just text, _, _ ) ->
                     viewProjectSearch model text
 
@@ -173,22 +189,25 @@ contentRow model =
                     viewEmptyProject model.style p
 
                 ( _, filteredTasks, _ ) ->
-                    Element.Lazy.lazy3 viewTasks model.style model.viewState filteredTasks
+                    selectList state filteredTasks
+
+        selectList : Model.ListState -> List Task -> Element Msg
+        selectList state filteredTasks =
+            case state.kind of
+                Model.Undone ->
+                    Element.Lazy.lazy3 viewTasks model.style state filteredTasks
+
+                Model.Done ->
+                    viewDoneTasksTimeline model.timeZone model.style state model.store.filteredTasks.data
 
         pane : ViewState -> Element Msg
         pane state =
             case state of
-                Selected _ s ->
-                    pane s
+                Model.ListTasks s ->
+                    listing s
 
-                None ->
-                    listing ()
-
-                Edit task ->
+                Edit { task } ->
                     viewTaskEdit model task
-
-                ShowDone ->
-                    viewDoneTasksTimeline model.timeZone model.style model.viewState model.store.filteredTasks.data
     in
     row [ width fill, height fill, clip ]
         [ projectList model
@@ -198,7 +217,7 @@ contentRow model =
 
 viewTaskEdit : Model -> Task -> Element Msg
 viewTaskEdit _ _ =
-    el [ width fill, height fill ] (text "Editing task")
+    el [ width fill, height fill, padding (paddingScale 2) ] (text "Editing task")
 
 
 projectList : Model -> Element Msg
@@ -220,7 +239,7 @@ projectCard model project =
         , Background.color
             (choose model.style.buttonBackground
                 model.style.taskBackground
-                (model.project == Just project)
+                (Model.project model == Just project)
             )
         , padding (paddingScale 1)
         , onClick (SetProject False project)
@@ -302,23 +321,13 @@ viewEmptyProject style project =
             ]
 
 
-isSelected : ViewState -> Task -> Bool
-isSelected viewState task =
-    case viewState of
-        Selected id _ ->
-            id == task.id
-
-        _ ->
-            False
-
-
-viewTasks : Style -> ViewState -> List Task -> Element Msg
-viewTasks style viewState tasks =
+viewTasks : Style -> Model.ListState -> List Task -> Element Msg
+viewTasks style state tasks =
     let
         task_ : Task -> ( String, Element Msg )
         task_ task =
             ( task.id
-            , viewTask style (isSelected viewState task) task
+            , viewTask style (state.selected == Just task.id) task
             )
     in
     Element.Keyed.column
@@ -362,7 +371,7 @@ taskDropdown style task =
                 [ padding (paddingScale 1)
                 , Background.color style.buttonBackground
                 , Font.size (style.textSize -1)
-                , onClickNoPropagate (SetViewState (Edit task))
+                , onClickNoPropagate (StartEditing task)
                 ]
                 { onPress = Nothing
                 , label = text "Edit"
@@ -410,20 +419,20 @@ viewTask style selected task =
         , Background.color color
         , spacing (paddingScale 2)
         , below dropdown
-        , onClickNoPropagate (SelectTask task.id)
+        , onClickNoPropagate (SelectTask (Just task.id))
         ]
         [ paragraph [ width fill ] [ text task.text ]
         , tags
         ]
 
 
-viewDoneTasksTimeline : Time.Zone -> Style -> ViewState -> List Task -> Element Msg
-viewDoneTasksTimeline zone style viewState tasks =
+viewDoneTasksTimeline : Time.Zone -> Style -> Model.ListState -> List Task -> Element Msg
+viewDoneTasksTimeline zone style state tasks =
     let
         task_ : Task -> ( String, Element Msg )
         task_ task =
             ( task.id
-            , viewTask style (isSelected viewState task) task
+            , viewTask style (state.selected == Just task.id) task
             )
 
         posixToDate : Time.Posix -> String

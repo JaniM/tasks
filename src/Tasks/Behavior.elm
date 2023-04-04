@@ -61,20 +61,31 @@ withTime createMsg =
     Task.perform createMsg Time.now
 
 
+setProjectInView : (Maybe String -> Maybe String) -> ViewState -> ViewState
+setProjectInView project view =
+    case view of
+        ListTasks state ->
+            ListTasks { state | project = project state.project }
+
+        Edit state ->
+            -- Don't allow changing projects when editing a task.
+            Edit state
+
+
 {-| Switch current projdct to the asked one. If it doesn't exist, add it to the list.
 -}
 switchProject : String -> Model -> Model
 switchProject project model =
     if project == "" then
-        { model | project = Nothing }
+        { model | viewState = setProjectInView (always Nothing) model.viewState }
 
     else if List.any ((==) project) model.projects then
-        { model | project = Just project }
+        { model | viewState = setProjectInView (always <| Just project) model.viewState }
 
     else
         { model
             | projects = project :: model.projects
-            , project = Just project
+            , viewState = setProjectInView (always <| Just project) model.viewState
         }
 
 
@@ -84,7 +95,7 @@ handleMainInput msg model =
         global : Tasks.MainInput.Global
         global =
             { projects = model.projects
-            , project = model.project
+            , project = Model.project model
             , tags = Counter.list model.store.tags
             }
 
@@ -100,7 +111,7 @@ handleMainInput msg model =
 
         addProjectToTags : List String -> List String
         addProjectToTags tags =
-            case model.project of
+            case Model.project model of
                 Just p ->
                     tags ++ [ "#" ++ p ]
 
@@ -124,7 +135,8 @@ handleMainInput msg model =
                 |> Cmd.withNoCmd
 
         Tasks.MainInput.Edited taskId text tags ->
-            { newModel | viewState = None }
+            newModel
+                |> Model.exitEdit
                 |> Model.updateTask (\t -> { t | text = text, tags = tags }) taskId
                 |> Cmd.withNoCmd
 
@@ -161,7 +173,7 @@ setProject clearText target model =
             else
                 Cmd.withNoCmd
     in
-    { model | project = nothingIfUnchanged target model.project }
+    { model | viewState = setProjectInView (nothingIfUnchanged target) model.viewState }
         |> after
 
 
@@ -172,7 +184,9 @@ deleteProject : String -> Model -> Model
 deleteProject target model =
     { model
         | projects = List.filter ((/=) target) model.projects
-        , project = choose Nothing model.project (model.project == Just target)
+        , viewState =
+            model.viewState
+                |> setProjectInView (\p -> choose Nothing p (p == Just target))
     }
 
 
@@ -189,14 +203,16 @@ loadModel m model =
 sortRuleByState : ViewState -> Task -> Int
 sortRuleByState v =
     case v of
-        Selected _ x ->
-            sortRuleByState x
+        Edit { prev } ->
+            sortRuleByState prev
 
-        ShowDone ->
-            negate << Maybe.unwrap 0 Time.posixToMillis << .doneAt
+        ListTasks { kind } ->
+            case kind of
+                Model.Undone ->
+                    negate << Maybe.unwrap 0 Time.posixToMillis << .doneAt
 
-        _ ->
-            negate << Time.posixToMillis << .createdAt
+                Model.Done ->
+                    negate << Time.posixToMillis << .createdAt
 
 
 {-| Sets the view state and updates global statd accordingly.
@@ -212,7 +228,7 @@ setViewState state model =
             }
     in
     case state of
-        Edit task ->
+        Edit { task } ->
             newModel |> handleMainInput (Tasks.MainInput.StartEditing task)
 
         _ ->
@@ -221,20 +237,29 @@ setViewState state model =
 
 {-| Select a task. Keeps note of view state hierarchy.
 -}
-selectTask : TaskId -> Model -> ( Model, Cmd Msg )
+selectTask : Maybe TaskId -> Model -> ( Model, Cmd Msg )
 selectTask id model =
     let
-        oldState : ViewState
-        oldState =
+        state : ViewState
+        state =
             case model.viewState of
-                -- We don't want to nest selections.
-                Selected _ state ->
-                    state
+                ListTasks s ->
+                    ListTasks { s | selected = id }
 
-                state ->
-                    state
+                s ->
+                    s
     in
-    setViewState (Selected id oldState) model
+    setViewState state model
+
+
+startEditing : Task -> Model -> ( Model, Cmd Msg )
+startEditing task model =
+    let
+        state : ViewState
+        state =
+            Edit { task = task, prev = model.viewState }
+    in
+    setViewState state model
 
 
 {-| Mark task as done at current time.
@@ -312,6 +337,9 @@ handleMsg msg =
         SelectTask id ->
             selectTask id
 
+        StartEditing task ->
+            startEditing task
+
         FocusInput ->
             onlyCmd <| always focusInput
 
@@ -362,7 +390,7 @@ applySearchToStore model =
     let
         search : SearchRule
         search =
-            case ( model.search, model.project ) of
+            case ( model.search, Model.project model ) of
                 ( Just s, _ ) ->
                     s
 
@@ -386,7 +414,7 @@ applySearchToStore model =
 updateFiltersAfterUpdate : Update -> Update
 updateFiltersAfterUpdate =
     executeIfChanged
-        (\m -> ( m.project, m.search, Model.showDoneTasks m.viewState ))
+        (\m -> ( Model.project m, m.search, Model.showDoneTasks m.viewState ))
         (Cmd.withNoCmd << applySearchToStore)
 
 

@@ -119,6 +119,6 @@ replaceinList pred item list =
                 item :: acc
 
             else
-                x :: list
+                x :: acc
     in
     List.foldr folder [] list
