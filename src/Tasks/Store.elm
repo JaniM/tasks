@@ -2,21 +2,25 @@ module Tasks.Store exposing
     ( Filter
     , Store
     , addTask
+    , countTasks
     , emptyStore
+    , firstTask
     , loadTasks
+    , nextTask
+    , prevTask
     , removeTask
     , updateFilter
     , updateSort
-    , updateTask, countTasks
+    , updateTask, lastTask
     )
 
 import Dict exposing (Dict)
+import List.Extra as List
 import Maybe.Extra as Maybe
 import Reactive.Dict exposing (RDict)
 import Reactive.List exposing (RList)
 import Tasks.Counter as Counter exposing (Counter)
 import Tasks.Task exposing (SearchRule, Task, TaskId, emptySwarch, emptyTask)
-import Time
 
 
 type alias Store =
@@ -33,16 +37,16 @@ type alias Filter =
     }
 
 
-makeFiltered : Filter -> RDict TaskId Task -> RList TaskId Task
-makeFiltered filter tasks =
+makeFiltered : Filter -> RDict TaskId Task -> (List Task -> List Task) -> RList TaskId Task
+makeFiltered filter tasks sort =
     Reactive.List.fromDict tasks
         |> Reactive.List.filter (filterTask filter)
-        |> Reactive.List.withPostStep (List.sortBy (negate << Time.posixToMillis << .createdAt))
+        |> Reactive.List.withPostStep sort
 
 
-updateSort : (Task -> Int) -> Store -> Store
+updateSort : (Task -> Task -> Order) -> Store -> Store
 updateSort sorter model =
-    { model | filteredTasks = Reactive.List.withPostStep (List.sortBy sorter) model.filteredTasks }
+    { model | filteredTasks = Reactive.List.withPostStep (List.sortWith sorter) model.filteredTasks }
 
 
 emptyStore : Store
@@ -68,7 +72,7 @@ loadTasks tasks model =
     in
     { model
         | tasks = rtasks
-        , filteredTasks = makeFiltered model.filter rtasks
+        , filteredTasks = makeFiltered model.filter rtasks model.filteredTasks.postStep
         , tags = Counter.addMany tags Counter.empty
     }
 
@@ -140,7 +144,7 @@ updateTask updater id model =
 
 updateFilter : Filter -> Store -> Store
 updateFilter rule model =
-    { model | filteredTasks = makeFiltered rule model.tasks }
+    { model | filteredTasks = makeFiltered rule model.tasks model.filteredTasks.postStep }
 
 
 filterTaskByTags : List String -> Task -> Bool
@@ -179,9 +183,42 @@ filterTask filter task =
         == filter.done
         && filterTaskBySearch filter.search task
 
+
 countTasks : Store -> Filter -> Int
 countTasks store filter =
     store.tasks.data
         |> Dict.values
-        |> List.filter  (filterTask filter)
+        |> List.filter (filterTask filter)
         |> List.length
+
+
+nextTask : TaskId -> Store -> Maybe TaskId
+nextTask id store =
+    store.filteredTasks.data
+        |> List.dropWhile ((/=) id << .id)
+        |> List.drop 1
+        |> List.head
+        |> Maybe.map .id
+
+
+prevTask : TaskId -> Store -> Maybe TaskId
+prevTask id store =
+    store.filteredTasks.data
+        |> List.reverse
+        |> List.dropWhile ((/=) id << .id)
+        |> List.drop 1
+        |> List.head
+        |> Maybe.map .id
+
+
+firstTask : Store -> Maybe TaskId
+firstTask store =
+    store.filteredTasks.data
+        |> List.head
+        |> Maybe.map .id
+
+lastTask : Store -> Maybe TaskId
+lastTask store =
+    store.filteredTasks.data
+        |> List.last
+        |> Maybe.map .id

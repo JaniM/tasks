@@ -9,11 +9,11 @@ import Task
 import Tasks.Counter as Counter
 import Tasks.Interop as Interop
 import Tasks.MainInput
-import Tasks.Model as Model exposing (Model, Msg(..), ViewState(..))
+import Tasks.Model as Model exposing (Model, Msg(..), Selection(..), ViewState(..))
 import Tasks.Store as Store
 import Tasks.Style exposing (darkStyle, lightStyle)
 import Tasks.Task exposing (SearchRule, Task, TaskId, emptySwarch, searchProject)
-import Tasks.Utils exposing (choose)
+import Tasks.Utils exposing (choose, flip)
 import Time
 
 
@@ -144,6 +144,10 @@ handleMainInput msg model =
             newModel
                 |> Cmd.withCmd (Interop.log err)
 
+        Tasks.MainInput.FocusMe ->
+            newModel
+                |> setSelection InputSelected
+
 
 {-| Removes the given task.
 -}
@@ -200,21 +204,6 @@ loadModel m model =
     }
 
 
-sortRuleByState : ViewState -> Task -> Int
-sortRuleByState v =
-    case v of
-        Edit { prev } ->
-            sortRuleByState prev
-
-        ListTasks { kind } ->
-            case kind of
-                Model.Done ->
-                    negate << Maybe.unwrap 0 Time.posixToMillis << .doneAt
-
-                Model.Undone ->
-                    negate << Time.posixToMillis << .createdAt
-
-
 {-| Sets the view state and updates global statd accordingly.
 -}
 setViewState : ViewState -> Model -> ( Model, Cmd Msg )
@@ -224,7 +213,7 @@ setViewState state model =
         newModel =
             { model
                 | viewState = state
-                , store = Store.updateSort (sortRuleByState state) model.store
+                , store = Store.updateSort (Model.sortRuleByState state) model.store
             }
     in
     case state of
@@ -238,18 +227,13 @@ setViewState state model =
 {-| Select a task. Keeps note of view state hierarchy.
 -}
 selectTask : Maybe TaskId -> Model -> ( Model, Cmd Msg )
-selectTask id model =
-    let
-        state : ViewState
-        state =
-            case model.viewState of
-                ListTasks s ->
-                    ListTasks { s | selected = id }
+selectTask mId model =
+    case mId of
+        Nothing ->
+            setSelection NoSelection model
 
-                s ->
-                    s
-    in
-    setViewState state model
+        Just id ->
+            setSelection (TaskSelected id 0) model
 
 
 startEditing : Task -> Model -> ( Model, Cmd Msg )
@@ -292,7 +276,17 @@ handleUpdateTask id f model =
 -}
 focusInput : Cmd Msg
 focusInput =
-    Task.attempt (\_ -> NoOp) (Browser.Dom.focus "input")
+    focusElement "input"
+
+
+unFocusElement : String -> Cmd Msg
+unFocusElement id =
+    Task.attempt (\_ -> NoOp) (Browser.Dom.blur id)
+
+
+focusElement : String -> Cmd Msg
+focusElement id =
+    Task.attempt (\_ -> NoOp) (Browser.Dom.focus id)
 
 
 {-| Sets the time zone. This will only be run once on startup.
@@ -316,6 +310,106 @@ pickTask id picked =
             }
     in
     withTime (UpdateTask id << updater)
+
+
+selectionId : Model.Selection -> String
+selectionId selection =
+    case selection of
+        Model.TaskSelected id button ->
+            id ++ "-" ++ String.fromInt button
+
+        NoSelection ->
+            "root"
+
+        InputSelected ->
+            "input"
+
+
+setSelection : Model.Selection -> Model -> ( Model, Cmd Msg )
+setSelection selection model =
+    case selection of
+        Model.TaskSelected id button ->
+            { model | selection = selection }
+                |> Cmd.withCmd (focusElement (id ++ "-" ++ String.fromInt button))
+
+        Model.NoSelection ->
+            { model | selection = selection }
+                |> Cmd.withCmd (unFocusElement (selectionId model.selection))
+
+        Model.InputSelected ->
+            { model | selection = selection }
+                |> Cmd.withCmd focusInput
+
+
+handleKeyDown : Model.Keyboard -> Model -> ( Model, Cmd Msg )
+handleKeyDown key model =
+    case model.viewState of
+        Edit _ ->
+            ( model, focusInput )
+
+        ListTasks _ ->
+            case key of
+                Model.Enter ->
+                    -- refocus to fix scroll
+                    setSelection model.selection model
+
+                Model.Left ->
+                    case model.selection of
+                        Model.TaskSelected _ 0 ->
+                            ( model, Cmd.none )
+
+                        Model.TaskSelected id button ->
+                            setSelection (TaskSelected id (button - 1)) model
+
+                        _ ->
+                            ( model, Cmd.none )
+
+                Model.Right ->
+                    -- TODO: Limit to number of buttons
+                    case model.selection of
+                        Model.TaskSelected id button ->
+                            setSelection (TaskSelected id (button + 1)) model
+
+                        _ ->
+                            ( model, Cmd.none )
+
+                Model.Down ->
+                    case model.selection of
+                        Model.TaskSelected id _ ->
+                            Store.nextTask id model.store
+                                |> Maybe.unwrap model.selection (flip TaskSelected 0)
+                                |> flip setSelection model
+
+                        Model.NoSelection ->
+                            Store.firstTask model.store
+                                |> Maybe.unwrap NoSelection (flip TaskSelected 0)
+                                |> flip setSelection model
+
+                        Model.InputSelected ->
+                            Store.firstTask model.store
+                                |> Maybe.unwrap model.selection (flip TaskSelected 0)
+                                |> flip setSelection model
+
+                Model.Up ->
+                    case model.selection of
+                        Model.TaskSelected id _ ->
+                            Store.prevTask id model.store
+                                |> Maybe.unwrap InputSelected (flip TaskSelected 0)
+                                |> flip setSelection model
+
+                        Model.NoSelection ->
+                            Store.lastTask model.store
+                                |> Maybe.unwrap NoSelection (flip TaskSelected 0)
+                                |> flip setSelection model
+
+                        Model.InputSelected ->
+                            ( model, Cmd.none )
+
+                Model.Escape ->
+                    setSelection NoSelection model
+
+                Model.SelectInput ->
+                    setSelection InputSelected model
 
 
 type alias Update =
@@ -356,9 +450,6 @@ handleMsg msg =
         StartEditing task ->
             startEditing task
 
-        FocusInput ->
-            onlyCmd <| always focusInput
-
         AddTask text tags time ->
             Cmd.withNoCmd << addTaskToModel (Task text tags time Nothing Nothing)
 
@@ -373,6 +464,9 @@ handleMsg msg =
 
         PickTask id add ->
             onlyCmd <| always <| pickTask id add
+
+        KeyDown key ->
+            handleKeyDown key
 
         NoOp ->
             Cmd.withNoCmd
@@ -426,7 +520,7 @@ applySearchToStore model =
                 , search = search
                 }
                 model.store
-                |> Store.updateSort (sortRuleByState model.viewState)
+                |> Store.updateSort (Model.sortRuleByState model.viewState)
     }
 
 

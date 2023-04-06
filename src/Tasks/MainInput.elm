@@ -15,13 +15,12 @@ import Element.Input
 import Html.Attributes
 import Html.Events
 import Json.Decode as D
-import Json.Decode.Extra as D
 import List.Extra as List
 import Maybe.Extra as Maybe
 import Tasks.Input exposing (parseInput, projectPrefix, searchPrefix)
 import Tasks.Style exposing (Style, paddingScale)
 import Tasks.Task exposing (SearchRule, Task, TaskId)
-import Tasks.Utils exposing (findCommonPrefix, findMatchingPrefix, listOfOne)
+import Tasks.Utils exposing (decodeKeys, findCommonPrefix, findMatchingPrefix, listOfOne)
 import Tuple exposing (mapFirst)
 
 
@@ -57,6 +56,7 @@ type Msg
     | SubmitInput
     | Tabfill
     | StartEditing Task
+    | Focus
 
 
 type Event
@@ -66,6 +66,7 @@ type Event
     | SetProject String
     | Edited TaskId String (List String)
     | Error String
+    | FocusMe
 
 
 defaultModel : Model
@@ -285,6 +286,9 @@ updateDefault global msg state =
             editTask task
                 |> withNoEvent
 
+        Focus ->
+            ( Default state, FocusMe )
+
 
 updateEdit : Global -> Msg -> EditState -> ( Model, Event )
 updateEdit global msg state =
@@ -305,6 +309,9 @@ updateEdit global msg state =
             ( Edit state
             , Error "Reached unreachable case: MainInput.updateEdit"
             )
+
+        Focus ->
+            ( Edit state, FocusMe )
 
 
 update : Global -> Msg -> Model -> ( Model, Event )
@@ -336,6 +343,7 @@ viewTaskInput style model =
     el [ width fill, padding (paddingScale 2) ] <|
         Element.Input.text
             [ onKeys [ ( "Enter", SubmitInput ), ( "Tab", Tabfill ) ]
+            , onClick Focus
             , Background.color style.taskBackground
             , Element.Input.focusedOnLoad
             , Html.Attributes.id "input" |> Element.htmlAttribute
@@ -380,12 +388,13 @@ tagSuggestionsBox style state =
 
 onKeys : List ( String, msg ) -> Attribute msg
 onKeys pairs =
-    let
-        decodeKey : ( String, msg ) -> D.Decoder ( msg, Bool )
-        decodeKey ( key, m ) =
-            D.when (D.field "key" D.string) ((==) key) (D.succeed ( m, True ))
-    in
-    List.map decodeKey pairs
-        |> D.oneOf
-        |> Html.Events.preventDefaultOn "keydown"
+    decodeKeys pairs
+        |> D.map (\m -> { message = m, stopPropagation = True, preventDefault = True })
+        |> Html.Events.custom "keydown"
+        |> Element.htmlAttribute
+
+
+onClick : msg -> Attribute msg
+onClick msg =
+    Html.Events.custom "click" (D.succeed { message = msg, stopPropagation = True, preventDefault = False })
         |> Element.htmlAttribute

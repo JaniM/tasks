@@ -39,7 +39,8 @@ import Element.Input as Input
 import Element.Keyed
 import Element.Lazy
 import Html exposing (Html)
-import Html.Events as HtmlEvents
+import Html.Attributes
+import Html.Events
 import Json.Decode as D
 import List.Extra as List
 import Maybe.Extra as Maybe
@@ -48,11 +49,11 @@ import Task
 import Tasks.Behavior
 import Tasks.Interop as Interop
 import Tasks.MainInput
-import Tasks.Model as Model exposing (Model, Msg(..), ViewState(..), emptyModel)
+import Tasks.Model as Model exposing (Keyboard(..), Model, Msg(..), Selection(..), ViewState(..), emptyModel)
 import Tasks.Store as Store
 import Tasks.Style exposing (Style, paddingScale)
 import Tasks.Task exposing (Task, searchProject)
-import Tasks.Utils exposing (choose, epoch, findMatchingPrefix, groupByKey)
+import Tasks.Utils exposing (choose, decodeControlKeys, decodeKeys, epoch, findMatchingPrefix, groupByKey)
 import Time
 import Time.Format
 import Time.Format.Config.Config_fi_fi
@@ -90,11 +91,48 @@ subscriptions model =
 
                 Interop.LoadModel m ->
                     LoadModel m
+
+        toggleShowDone : Msg
+        toggleShowDone =
+            SetViewState <|
+                setKind
+                    (choose
+                        Model.Undone
+                        Model.Done
+                        (Model.viewListKind model.viewState == Model.Done)
+                    )
+                    model.viewState
+
+        vimNavigation : List ( String, Msg )
+        vimNavigation =
+            [ ( "k", KeyDown Up )
+            , ( "j", KeyDown Down )
+            , ( "h", KeyDown Left )
+            , ( "l", KeyDown Right )
+            , ( "e", KeyDown SelectInput )
+            , ( "d", toggleShowDone )
+            ]
+
+        keys : List ( String, Msg )
+        keys =
+            [ ( "ArrowUp", KeyDown Up )
+            , ( "ArrowDown", KeyDown Down )
+            , ( "ArrowLeft", KeyDown Left )
+            , ( "ArrowRight", KeyDown Right )
+            , ( "Enter", KeyDown Enter )
+            , ( " ", KeyDown Enter )
+            , ( "Escape", KeyDown Escape )
+            ]
+                ++ choose [] vimNavigation (model.selection == Model.InputSelected)
     in
     Sub.batch
         [ Interop.subscribe interopHandler
-        , Browser.Events.onKeyDown (D.succeed FocusInput)
         , Time.every (60 * 1000) (SetTime model.timeZone)
+        , D.oneOf
+            [ decodeControlKeys vimNavigation
+            , decodeKeys keys
+            ]
+            |> Browser.Events.onKeyDown
         ]
 
 
@@ -202,10 +240,10 @@ contentRow ({ style } as model) =
         selectList state filteredTasks =
             case state.kind of
                 Model.Undone ->
-                    Element.Lazy.lazy3 viewTasks styleWithTime state filteredTasks
+                    Element.Lazy.lazy3 viewTasks styleWithTime model.selection filteredTasks
 
                 Model.Done ->
-                    viewDoneTasksTimeline model.timeZone styleWithTime state model.store.filteredTasks.data
+                    viewDoneTasksTimeline model.timeZone styleWithTime model.selection model.store.filteredTasks.data
 
         pane : ViewState -> Element Msg
         pane state =
@@ -337,13 +375,23 @@ justIf b f =
         Nothing
 
 
-viewTasks : Style -> Model.ListState -> List Task -> Element Msg
-viewTasks style state tasks =
+selectedTask : Selection -> Maybe String
+selectedTask selection =
+    case selection of
+        TaskSelected id _ ->
+            Just id
+
+        _ ->
+            Nothing
+
+
+viewTasks : Style -> Selection -> List Task -> Element Msg
+viewTasks style selection tasks =
     let
         task_ : Task -> ( String, Element Msg )
         task_ task =
             ( task.id
-            , viewTask style (state.selected == Just task.id) task
+            , viewTask style (selectedTask selection == Just task.id) task
             )
 
         ( picked, unpicked ) =
@@ -388,61 +436,77 @@ viewTasks style state tasks =
         , spacing (paddingScale 2)
         , padding (paddingScale 2)
         , scrollbarY
+        , disableKeys
         ]
         (List.filterMap identity [ lateElem, onTimeElem, unpickedElem ])
+
+
+disableKeys : Attribute Msg
+disableKeys =
+    Html.Events.custom "keydown" (D.succeed { message = NoOp, stopPropagation = False, preventDefault = True })
+        |> htmlAttribute
 
 
 taskDropdown : Style -> Task -> Element Msg
 taskDropdown style task =
     let
-        button : { label : Element msg, onPress : Maybe msg } -> Element msg
-        button =
+        button : { label : Element msg, onPress : Maybe msg, attrs : List (Attribute msg) } -> Int -> Element msg
+        button config n =
+            let
+                attrs : List (Attribute msg)
+                attrs =
+                    config.attrs
+                        ++ [ padding (paddingScale 1)
+                           , Background.color style.buttonBackground
+                           , Font.size (style.textSize -1)
+                           , Html.Attributes.id (task.id ++ "-" ++ String.fromInt n)
+                                |> htmlAttribute
+                           ]
+            in
             Input.button
-                [ padding (paddingScale 1)
-                , Background.color style.buttonBackground
-                , Font.size (style.textSize -1)
-                ]
+                attrs
+                { onPress = config.onPress, label = config.label }
 
-        remove : Element Msg
+        remove : Int -> Element Msg
         remove =
             button
                 { onPress = Just (RemoveTask task.id)
                 , label = text "Remove"
+                , attrs = []
                 }
 
-        done : Element Msg
+        done : Int -> Element Msg
         done =
             if Maybe.isJust task.doneAt then
                 button
                     { onPress = Just (MarkDone task.id)
                     , label = text "Unmark Done"
+                    , attrs = []
                     }
 
             else
                 button
                     { onPress = Just (MarkDone task.id)
                     , label = text "Done"
+                    , attrs = []
                     }
 
-        edit : Element Msg
+        edit : Int -> Element Msg
         edit =
-            Input.button
-                [ padding (paddingScale 1)
-                , Background.color style.buttonBackground
-                , Font.size (style.textSize -1)
-                , onClickNoPropagate (StartEditing task)
-                ]
+            button
                 { onPress = Nothing
                 , label = text "Edit"
+                , attrs = [ onClickNoPropagate (StartEditing task) ]
                 }
 
-        pick : Maybe (Element Msg)
-        pick =
+        pick : () -> Maybe (Int -> Element Msg)
+        pick () =
             if pickedOnDifferentDate style task then
                 Just
                     (button
                         { onPress = Just (PickTask task.id True)
                         , label = text "Repick"
+                        , attrs = []
                         }
                     )
 
@@ -454,34 +518,37 @@ taskDropdown style task =
                     (button
                         { onPress = Just (PickTask task.id True)
                         , label = text "Pick"
+                        , attrs = []
                         }
                     )
 
-        unpick : Maybe (Element Msg)
-        unpick =
+        unpick : () -> Maybe (Int -> Element Msg)
+        unpick () =
             justIf (Maybe.isJust task.pickedAt)
                 (\_ ->
                     button
                         { onPress = Just (PickTask task.id False)
                         , label = text "Unpick"
+                        , attrs = []
                         }
                 )
-        
-        buttons : List (Maybe (Element Msg))
+
+        buttons : List (Maybe (Int -> Element Msg))
         buttons =
             if Maybe.isJust task.doneAt then
                 [ Just done, Just edit, Just remove ]
 
             else
-                [ pick, unpick, Just done, Just edit, Just remove ]
+                [ pick (), unpick (), Just done, Just edit, Just remove ]
     in
-    row
-        [ Background.color style.taskBackground
-        , Element.Border.width 1
-        , padding (paddingScale 2)
-        , spacing (paddingScale 2)
-        ]
-        (List.filterMap identity buttons)
+    List.filterMap identity buttons
+        |> List.indexedMap (\i f -> f i)
+        |> row
+            [ Background.color style.taskBackground
+            , Element.Border.width 1
+            , padding (paddingScale 2)
+            , spacing (paddingScale 2)
+            ]
 
 
 viewTask : Style -> Bool -> Task -> Element Msg
@@ -533,13 +600,13 @@ pickedOnDifferentDate style task =
         |> Maybe.withDefault False
 
 
-viewDoneTasksTimeline : Time.Zone -> Style -> Model.ListState -> List Task -> Element Msg
-viewDoneTasksTimeline zone style state tasks =
+viewDoneTasksTimeline : Time.Zone -> Style -> Selection -> List Task -> Element Msg
+viewDoneTasksTimeline zone style selection tasks =
     let
         task_ : Task -> ( String, Element Msg )
         task_ task =
             ( task.id
-            , viewTask style (state.selected == Just task.id) task
+            , viewTask style (selectedTask selection == Just task.id) task
             )
 
         posixToDate : Time.Posix -> String
@@ -587,5 +654,5 @@ equalDate z a b =
 onClickNoPropagate : msg -> Attribute msg
 onClickNoPropagate msg =
     D.succeed ( msg, True )
-        |> HtmlEvents.stopPropagationOn "click"
+        |> Html.Events.stopPropagationOn "click"
         |> htmlAttribute

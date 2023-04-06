@@ -1,9 +1,11 @@
 module Tasks.Model exposing
     ( EditState
+    , Keyboard(..)
     , ListKind(..)
     , ListState
     , Model
     , Msg(..)
+    , Selection(..)
     , StoredModel
     , Tag
     , ViewState(..)
@@ -13,18 +15,20 @@ module Tasks.Model exposing
     , project
     , selectedTask
     , showDoneTasks
+    , sortRuleByState
     , updateTask
     , viewListKind
     )
 
 import Dict exposing (Dict)
+import Maybe.Extra as Maybe
 import Random.Pcg.Extended as Pcg
 import Tasks.MainInput
 import Tasks.Store as Store exposing (Store)
 import Tasks.Style exposing (Style)
 import Tasks.Task exposing (SearchRule, Task, TaskId)
-import Time
 import Tasks.Utils exposing (epoch)
+import Time
 
 
 type alias Tag =
@@ -54,6 +58,7 @@ type alias Model =
     , currentTime : Time.Posix
     , search : Maybe SearchRule
     , mainInput : Tasks.MainInput.Model
+    , selection : Selection
     }
 
 
@@ -64,7 +69,6 @@ type ViewState
 
 type alias ListState =
     { project : Maybe String
-    , selected : Maybe TaskId
     , kind : ListKind
     }
 
@@ -94,23 +98,48 @@ type Msg
     | SetViewState ViewState
     | SelectTask (Maybe TaskId)
     | StartEditing Task
-    | FocusInput
     | SetTime Time.Zone Time.Posix
     | PickTask TaskId Bool
+    | KeyDown Keyboard
     | NoOp
+
+
+type Keyboard
+    = Up
+    | Down
+    | Left
+    | Right
+    | Enter
+    | Escape
+    | SelectInput
+
+
+type Selection
+    = InputSelected
+      -- id of the selected task and the index of the selected button
+    | TaskSelected TaskId Int
+    | NoSelection
+
+
+defaultViewState : ViewState
+defaultViewState =
+    ListTasks { project = Nothing, kind = Undone }
 
 
 emptyModel : Model
 emptyModel =
-    { store = Store.emptyStore
+    { store =
+        Store.emptyStore
+            |> Store.updateSort (sortRuleByState defaultViewState)
     , projects = []
     , seed = Pcg.initialSeed 0 []
     , style = Tasks.Style.darkStyle
-    , viewState = ListTasks { project = Nothing, selected = Nothing, kind = Undone }
+    , viewState = defaultViewState
     , currentTime = epoch
     , timeZone = Time.utc
     , search = Nothing
     , mainInput = Tasks.MainInput.defaultModel
+    , selection = InputSelected
     }
 
 
@@ -146,7 +175,12 @@ project model =
 
 selectedTask : Model -> Maybe TaskId
 selectedTask model =
-    viewSelected model.viewState
+    case model.selection of
+        TaskSelected id _ ->
+            Just id
+
+        _ ->
+            Nothing
 
 
 recurseViewState : ViewState -> ListState
@@ -169,16 +203,6 @@ viewListKind =
     recurseViewState >> .kind
 
 
-viewSelected : ViewState -> Maybe TaskId
-viewSelected view =
-    case view of
-        ListTasks state ->
-            state.selected
-
-        Edit _ ->
-            Nothing
-
-
 exitEdit : Model -> Model
 exitEdit model =
     let
@@ -192,3 +216,30 @@ exitEdit model =
                     x
     in
     { model | viewState = viewState }
+
+
+sortRuleByState : ViewState -> Task -> Task -> Order
+sortRuleByState v a b =
+    case v of
+        Edit { prev } ->
+            sortRuleByState prev a b
+
+        ListTasks { kind } ->
+            case kind of
+                Done ->
+                    compare
+                        (Maybe.unwrap 0 Time.posixToMillis b.doneAt)
+                        (Maybe.unwrap 0 Time.posixToMillis a.doneAt)
+
+                Undone ->
+                    case ( a.pickedAt, b.pickedAt ) of
+                        ( Just _, Nothing ) ->
+                            LT
+
+                        ( Nothing, Just _ ) ->
+                            GT
+
+                        _ ->
+                            compare
+                                (Time.posixToMillis b.createdAt)
+                                (Time.posixToMillis a.createdAt)
