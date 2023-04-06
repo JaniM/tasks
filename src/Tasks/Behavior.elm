@@ -2,6 +2,7 @@ module Tasks.Behavior exposing (Update, update)
 
 import Browser.Dom
 import Cmd.Extra as Cmd
+import List.Extra as List
 import Maybe.Extra as Maybe
 import Prng.Uuid
 import Random.Pcg.Extended as Pcg
@@ -124,7 +125,7 @@ handleMainInput msg model =
 
         Tasks.MainInput.AddTask text tags ->
             newModel
-                |> Cmd.withCmd (withTime (AddTask text (addProjectToTags tags)))
+                |> Cmd.withCmd (withTime (AddTask text (addProjectToTags tags |> List.unique)))
 
         Tasks.MainInput.SetSearch rule ->
             { newModel | search = Just rule }
