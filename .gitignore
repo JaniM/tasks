@@ -4,3 +4,5 @@ package-lock.json
 
 www/elm.js
 data.json*
+
+dist/
