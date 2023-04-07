@@ -18,11 +18,8 @@ import Tasks.Utils exposing (choose, flip)
 import Time
 
 
-{-| Inserts a new task to the model.
-This function steps the model's PRNG to produce an id for the task.
--}
-addTaskToModel : (TaskId -> Task) -> Model -> Model
-addTaskToModel createTask model =
+nextId : Model -> ( TaskId, Model )
+nextId model =
     let
         ( uuid, seed ) =
             Pcg.step Prng.Uuid.generator model.seed
@@ -31,10 +28,23 @@ addTaskToModel createTask model =
         id =
             Prng.Uuid.toString uuid
     in
-    { model
-        | seed = seed
-        , store = Store.addTask (createTask id) model.store
-    }
+    if Store.hasTask id model.store then
+        nextId { model | seed = seed }
+
+    else
+        ( id, { model | seed = seed } )
+
+
+{-| Inserts a new task to the model.
+This function steps the model's PRNG to produce an id for the task.
+-}
+addTaskToModel : (TaskId -> Task) -> Model -> Model
+addTaskToModel createTask model =
+    let
+        ( id, model_ ) =
+            nextId model
+    in
+    { model_ | store = Store.addTask (createTask id) model.store }
 
 
 onlyCmd : (model -> Cmd msg) -> model -> ( model, Cmd msg )

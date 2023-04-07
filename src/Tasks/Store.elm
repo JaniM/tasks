@@ -5,13 +5,15 @@ module Tasks.Store exposing
     , countTasks
     , emptyStore
     , firstTask
+    , hasTask
+    , lastTask
     , loadTasks
     , nextTask
     , prevTask
     , removeTask
     , updateFilter
     , updateSort
-    , updateTask, lastTask
+    , updateTask
     )
 
 import Dict exposing (Dict)
@@ -217,8 +219,20 @@ firstTask store =
         |> List.head
         |> Maybe.map .id
 
+
 lastTask : Store -> Maybe TaskId
 lastTask store =
     store.filteredTasks.data
         |> List.last
         |> Maybe.map .id
+
+
+getTask : TaskId -> Store -> Maybe Task
+getTask id store =
+    Dict.get id store.tasks.data
+
+
+hasTask : TaskId -> Store -> Bool
+hasTask id store =
+    getTask id store
+        |> Maybe.isJust
