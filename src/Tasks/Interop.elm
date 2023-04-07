@@ -113,7 +113,7 @@ encodeModel model =
                 ]
     in
     E.object
-        [ ( "tasks", E.dict identity task model.store.tasks.data )
+        [ ( "tasks", E.dict identity task model.store.tasks )
         , ( "projects", E.list E.string model.projects )
         ]
 

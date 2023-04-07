@@ -226,7 +226,7 @@ contentRow ({ style } as model) =
 
         listing : Model.ListState -> Element Msg
         listing state =
-            case ( Tasks.MainInput.projectSearch model.mainInput, model.store.filteredTasks.data, state.project ) of
+            case ( Tasks.MainInput.projectSearch model.mainInput, model.store.filteredTasks, state.project ) of
                 ( Just text, _, _ ) ->
                     viewProjectSearch model text
 
@@ -243,7 +243,7 @@ contentRow ({ style } as model) =
                     Element.Lazy.lazy3 viewTasks styleWithTime model.selection filteredTasks
 
                 Model.Done ->
-                    viewDoneTasksTimeline model.timeZone styleWithTime model.selection model.store.filteredTasks.data
+                    viewDoneTasksTimeline model.timeZone styleWithTime model.selection filteredTasks
 
         pane : ViewState -> Element Msg
         pane state =

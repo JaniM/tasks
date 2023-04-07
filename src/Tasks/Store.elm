@@ -19,17 +19,16 @@ module Tasks.Store exposing
 import Dict exposing (Dict)
 import List.Extra as List
 import Maybe.Extra as Maybe
-import Reactive.Dict exposing (RDict)
-import Reactive.List exposing (RList)
 import Tasks.Counter as Counter exposing (Counter)
 import Tasks.Task exposing (SearchRule, Task, TaskId, emptySwarch, emptyTask)
 
 
 type alias Store =
-    { tasks : RDict TaskId Task
-    , filteredTasks : RList TaskId Task
+    { tasks : Dict TaskId Task
+    , filteredTasks : List Task
     , tags : Counter String
     , filter : Filter
+    , sort : Task -> Task -> Order
     }
 
 
@@ -39,24 +38,21 @@ type alias Filter =
     }
 
 
-makeFiltered : Filter -> RDict TaskId Task -> (List Task -> List Task) -> RList TaskId Task
-makeFiltered filter tasks sort =
-    Reactive.List.fromDict tasks
-        |> Reactive.List.filter (filterTask filter)
-        |> Reactive.List.withPostStep sort
-
-
 updateSort : (Task -> Task -> Order) -> Store -> Store
 updateSort sorter model =
-    { model | filteredTasks = Reactive.List.withPostStep (List.sortWith sorter) model.filteredTasks }
+    { model
+        | filteredTasks = List.sortWith sorter model.filteredTasks
+        , sort = sorter
+    }
 
 
 emptyStore : Store
 emptyStore =
-    { tasks = Reactive.Dict.empty .id always
-    , filteredTasks = Reactive.List.empty .id
+    { tasks = Dict.empty
+    , filteredTasks = []
     , tags = Counter.empty
     , filter = { done = False, search = emptySwarch }
+    , sort = \_ _ -> EQ
     }
 
 
@@ -67,14 +63,13 @@ loadTasks tasks model =
         tags =
             Dict.values tasks
                 |> List.concatMap .tags
-
-        rtasks : RDict TaskId Task
-        rtasks =
-            Reactive.Dict.fromNormal tasks .id always
     in
     { model
-        | tasks = rtasks
-        , filteredTasks = makeFiltered model.filter rtasks model.filteredTasks.postStep
+        | tasks = tasks
+        , filteredTasks =
+            Dict.values tasks
+                |> List.filter (filterTask model.filter)
+                |> List.sortWith model.sort
         , tags = Counter.addMany tags Counter.empty
     }
 
@@ -82,11 +77,17 @@ loadTasks tasks model =
 addTask : Task -> Store -> Store
 addTask task model =
     let
-        ( tasks, taskStep ) =
-            Reactive.Dict.add task model.tasks
+        tasks : Dict TaskId Task
+        tasks =
+            Dict.insert task.id task model.tasks
 
-        ( filteredTasks, _ ) =
-            Reactive.List.step taskStep model.filteredTasks
+        filteredTasks : List Task
+        filteredTasks =
+            if filterTask model.filter task then
+                List.sortWith model.sort (task :: model.filteredTasks)
+
+            else
+                model.filteredTasks
     in
     { model
         | tasks = tasks
@@ -100,14 +101,16 @@ removeTask taskId model =
     let
         task : Task
         task =
-            Dict.get taskId model.tasks.data
-                |> Maybe.unwrap emptyTask identity
+            Dict.get taskId model.tasks
+                |> Maybe.withDefault emptyTask
 
-        ( tasks, taskStep ) =
-            Reactive.Dict.remove task model.tasks
+        tasks : Dict TaskId Task
+        tasks =
+            Dict.remove taskId model.tasks
 
-        ( filteredTasks, _ ) =
-            Reactive.List.step taskStep model.filteredTasks
+        filteredTasks : List Task
+        filteredTasks =
+            List.filter ((/=) taskId << .id) model.filteredTasks
     in
     { model
         | tasks = tasks
@@ -118,7 +121,7 @@ removeTask taskId model =
 
 updateTask : (Task -> Task) -> TaskId -> Store -> Store
 updateTask updater id model =
-    case Dict.get id model.tasks.data of
+    case Dict.get id model.tasks of
         Nothing ->
             model
 
@@ -128,11 +131,17 @@ updateTask updater id model =
                 newTask =
                     updater task
 
-                ( tasks, taskStep ) =
-                    Reactive.Dict.update newTask model.tasks
+                tasks : Dict TaskId Task
+                tasks =
+                    Dict.insert id newTask model.tasks
 
-                ( filteredTasks, _ ) =
-                    Reactive.List.step taskStep model.filteredTasks
+                filteredTasks : List Task
+                filteredTasks =
+                    if filterTask model.filter newTask then
+                        List.sortWith model.sort (newTask :: List.filter ((/=) id << .id) model.filteredTasks)
+
+                    else
+                        List.filter ((/=) id << .id) model.filteredTasks
             in
             { model
                 | tasks = tasks
@@ -146,7 +155,13 @@ updateTask updater id model =
 
 updateFilter : Filter -> Store -> Store
 updateFilter rule model =
-    { model | filteredTasks = makeFiltered rule model.tasks model.filteredTasks.postStep }
+    { model
+        | filteredTasks =
+            Dict.values model.tasks
+                |> List.filter (filterTask rule)
+                |> List.sortWith model.sort
+        , filter = rule
+    }
 
 
 filterTaskByTags : List String -> Task -> Bool
@@ -188,7 +203,7 @@ filterTask filter task =
 
 countTasks : Store -> Filter -> Int
 countTasks store filter =
-    store.tasks.data
+    store.tasks
         |> Dict.values
         |> List.filter (filterTask filter)
         |> List.length
@@ -196,7 +211,7 @@ countTasks store filter =
 
 nextTask : TaskId -> Store -> Maybe TaskId
 nextTask id store =
-    store.filteredTasks.data
+    store.filteredTasks
         |> List.dropWhile ((/=) id << .id)
         |> List.drop 1
         |> List.head
@@ -205,7 +220,7 @@ nextTask id store =
 
 prevTask : TaskId -> Store -> Maybe TaskId
 prevTask id store =
-    store.filteredTasks.data
+    store.filteredTasks
         |> List.reverse
         |> List.dropWhile ((/=) id << .id)
         |> List.drop 1
@@ -215,21 +230,21 @@ prevTask id store =
 
 firstTask : Store -> Maybe TaskId
 firstTask store =
-    store.filteredTasks.data
+    store.filteredTasks
         |> List.head
         |> Maybe.map .id
 
 
 lastTask : Store -> Maybe TaskId
 lastTask store =
-    store.filteredTasks.data
+    store.filteredTasks
         |> List.last
         |> Maybe.map .id
 
 
 getTask : TaskId -> Store -> Maybe Task
 getTask id store =
-    Dict.get id store.tasks.data
+    Dict.get id store.tasks
 
 
 hasTask : TaskId -> Store -> Bool
