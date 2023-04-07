@@ -1,11 +1,12 @@
 {
   "name": "tasks",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "",
   "main": "main.js",
   "scripts": {
-    "build": "elm make src/Main.elm --output=www/elm.js",
-    "prestart": "npm run build",
+    "build:dev": "elm make src/Main.elm --output=www/elm.js",
+    "build": "elm make src/Main.elm --output=www/elm.js --optimize",
+    "prestart": "npm run build:dev",
     "start": "electron .",
     "prepack": "npm run build",
     "pack": "electron-builder --dir",
@@ -18,9 +19,10 @@
       "!elm-stuff",
       "!elm.json",
       "!review",
-      "!data.json",
+      "!data.json*",
       "!src",
-      "!dist"
+      "!dist",
+      "!README.md"
     ]
   },
   "author": "",
