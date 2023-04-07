@@ -430,15 +430,15 @@ viewTasks style selection tasks =
                         (List.map task_ unpicked)
                 )
     in
-    Element.column
-        [ width fill
-        , height fill
-        , spacing (paddingScale 2)
-        , padding (paddingScale 2)
-        , scrollbarY
-        , disableKeys
-        ]
-        (List.filterMap identity [ lateElem, onTimeElem, unpickedElem ])
+    el [ width fill, height fill, padding (paddingScale 2) ] <|
+        Element.column
+            [ width fill
+            , height fill
+            , spacing (paddingScale 2)
+            , scrollbarY
+            , disableKeys
+            ]
+            (List.filterMap identity [ lateElem, onTimeElem, unpickedElem ])
 
 
 disableKeys : Attribute Msg
