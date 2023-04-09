@@ -115,7 +115,11 @@ handleMainInput : DefaultState -> ( DefaultState, Event )
 handleMainInput state =
     case parseInput state.text of
         Ok (Tasks.Input.Text text tags) ->
-            ( defaultState, AddTask text tags )
+            if String.isEmpty text then
+                ( state, None )
+
+            else
+                ( defaultState, AddTask text tags )
 
         Ok (Tasks.Input.Project project) ->
             ( defaultState, SetProject project )

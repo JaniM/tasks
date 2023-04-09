@@ -1,13 +1,12 @@
-module Tasks.Views.Help exposing (Model, Msg, default, update, view, open, close)
+module Tasks.Views.Help exposing (Model, Msg, close, default, open, update, view)
 
-import Element exposing (Element, alignRight, alignTop, column, el, fill, height, none, padding, paddingXY, paragraph, px, row, text, width)
+import Element exposing (Element, alignRight, alignTop, column, el, fill, height, none, padding, paddingXY, paragraph, px, row, spacing, text, width)
 import Element.Background
 import Element.Border
 import Element.Font
 import Element.Input
 import Tasks.Style exposing (Style, paddingScale)
 import Tasks.Utils exposing (choose)
-import Element exposing (spacing)
 
 
 type alias Model =
@@ -32,9 +31,11 @@ open : Model -> Model
 open model =
     { model | visible = True }
 
+
 close : Model -> Model
 close model =
     { model | visible = False }
+
 
 update : Msg -> Model -> Model
 update msg model =
