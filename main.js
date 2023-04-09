@@ -3,7 +3,8 @@ const path = require("path");
 const fs = require("fs/promises");
 
 // TODO: Make this configurable
-const dataPath = path.join(app.getPath("home"), ".tasks");
+const dataPath =
+  process.env.TASKS_PATH || path.join(app.getPath("home"), ".tasks");
 console.log("Using data path:", dataPath);
 
 const createWindow = () => {

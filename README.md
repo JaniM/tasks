@@ -11,4 +11,5 @@ A decent task application.
 
 For builds, just run
 
-    npm make
+    npm run dist -- --linux
+    npm run dist -- --win portable

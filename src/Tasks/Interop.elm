@@ -8,6 +8,7 @@ port module Tasks.Interop exposing
 
 import Dict exposing (Dict)
 import Json.Decode as D
+import Json.Decode.Extra as D
 import Json.Encode as E
 import Json.Encode.Extra as E
 import Result.Extra as Result
@@ -115,6 +116,7 @@ encodeModel model =
     E.object
         [ ( "tasks", E.dict identity task model.store.tasks )
         , ( "projects", E.list E.string model.projects )
+        , ( "showHelp", E.bool model.help.showOnStartup )
         ]
 
 
@@ -140,8 +142,13 @@ decodeModel =
         projects =
             D.list D.string
                 |> D.field "projects"
+
+        showHelp : D.Decoder Bool
+        showHelp =
+            D.optionalField "showHelp" D.bool
+                |> D.map (Maybe.withDefault True)
     in
-    D.map2 StoredModel tasks projects
+    D.map3 StoredModel tasks projects showHelp
 
 
 decodeTime : D.Decoder Time.Posix

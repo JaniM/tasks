@@ -2,7 +2,7 @@ module Tasks.Input exposing
     ( InputDesc(..)
     , parseInput
     , projectPrefix
-    , searchPrefix
+    , searchPrefix, helpPrefix
     )
 
 import Parser as P exposing ((|.), (|=), DeadEnd, Parser)
@@ -15,6 +15,7 @@ type InputDesc
     = Text String (List String)
     | Project String
     | Search SearchRule
+    | Help
 
 
 type TextPart
@@ -32,6 +33,11 @@ searchPrefix =
     "/search "
 
 
+helpPrefix : String
+helpPrefix =
+    "/help"
+
+
 parseInput : String -> Result (List DeadEnd) InputDesc
 parseInput =
     P.run <|
@@ -39,6 +45,8 @@ parseInput =
             [ P.succeed Project
                 |. P.token projectPrefix
                 |= rest
+            , P.succeed Help
+                |. P.token helpPrefix
             , P.succeed partsToSearch
                 |. P.token searchPrefix
                 |= multipleParts

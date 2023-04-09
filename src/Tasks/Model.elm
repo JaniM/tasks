@@ -29,6 +29,7 @@ import Tasks.Style exposing (Style)
 import Tasks.Task exposing (SearchRule, Task, TaskId)
 import Tasks.Utils exposing (epoch)
 import Time
+import Tasks.Views.Help
 
 
 type alias Tag =
@@ -38,6 +39,7 @@ type alias Tag =
 type alias StoredModel =
     { tasks : Dict String Task
     , projects : List String
+    , showHelp : Bool
     }
 
 
@@ -59,6 +61,7 @@ type alias Model =
     , search : Maybe SearchRule
     , mainInput : Tasks.MainInput.Model
     , selection : Selection
+    , help : Tasks.Views.Help.Model
     }
 
 
@@ -101,6 +104,7 @@ type Msg
     | SetTime Time.Zone Time.Posix
     | PickTask TaskId Bool
     | KeyDown Keyboard
+    | Help Tasks.Views.Help.Msg
     | NoOp
 
 
@@ -140,6 +144,7 @@ emptyModel =
     , search = Nothing
     , mainInput = Tasks.MainInput.defaultModel
     , selection = InputSelected
+    , help = Tasks.Views.Help.default
     }
 
 

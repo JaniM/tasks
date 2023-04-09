@@ -15,6 +15,7 @@ import Tasks.Store as Store
 import Tasks.Style exposing (darkStyle, lightStyle)
 import Tasks.Task exposing (SearchRule, Task, TaskId, emptySwarch, searchProject)
 import Tasks.Utils exposing (choose, flip)
+import Tasks.Views.Help
 import Time
 
 
@@ -159,6 +160,10 @@ handleMainInput msg model =
             newModel
                 |> setSelection InputSelected
 
+        Tasks.MainInput.OpenHelp ->
+            { newModel | help = Tasks.Views.Help.open model.help }
+                |> setSelection NoSelection
+
 
 {-| Removes the given task.
 -}
@@ -212,6 +217,10 @@ loadModel m model =
     { model
         | store = Store.loadTasks m.tasks model.store
         , projects = m.projects
+        , help =
+            { visible = m.showHelp
+            , showOnStartup = m.showHelp
+            }
     }
 
 
@@ -354,73 +363,82 @@ setSelection selection model =
 
 handleKeyDown : Model.Keyboard -> Model -> ( Model, Cmd Msg )
 handleKeyDown key model =
-    case model.viewState of
-        Edit _ ->
-            ( model, focusInput )
+    if model.help.visible then
+        case key of
+            Model.Escape ->
+                ( { model | help = Tasks.Views.Help.close model.help }, Cmd.none )
 
-        ListTasks _ ->
-            case key of
-                Model.Enter ->
-                    -- refocus to fix scroll
-                    setSelection model.selection model
+            _ ->
+                ( model, Cmd.none )
 
-                Model.Left ->
-                    case model.selection of
-                        Model.TaskSelected _ 0 ->
-                            ( model, Cmd.none )
+    else
+        case model.viewState of
+            Edit _ ->
+                ( model, focusInput )
 
-                        Model.TaskSelected id button ->
-                            setSelection (TaskSelected id (button - 1)) model
+            ListTasks _ ->
+                case key of
+                    Model.Enter ->
+                        -- refocus to fix scroll
+                        setSelection model.selection model
 
-                        _ ->
-                            ( model, Cmd.none )
+                    Model.Left ->
+                        case model.selection of
+                            Model.TaskSelected _ 0 ->
+                                ( model, Cmd.none )
 
-                Model.Right ->
-                    -- TODO: Limit to number of buttons
-                    case model.selection of
-                        Model.TaskSelected id button ->
-                            setSelection (TaskSelected id (button + 1)) model
+                            Model.TaskSelected id button ->
+                                setSelection (TaskSelected id (button - 1)) model
 
-                        _ ->
-                            ( model, Cmd.none )
+                            _ ->
+                                ( model, Cmd.none )
 
-                Model.Down ->
-                    case model.selection of
-                        Model.TaskSelected id _ ->
-                            Store.nextTask id model.store
-                                |> Maybe.unwrap model.selection (flip TaskSelected 0)
-                                |> flip setSelection model
+                    Model.Right ->
+                        -- TODO: Limit to number of buttons
+                        case model.selection of
+                            Model.TaskSelected id button ->
+                                setSelection (TaskSelected id (button + 1)) model
 
-                        Model.NoSelection ->
-                            Store.firstTask model.store
-                                |> Maybe.unwrap NoSelection (flip TaskSelected 0)
-                                |> flip setSelection model
+                            _ ->
+                                ( model, Cmd.none )
 
-                        Model.InputSelected ->
-                            Store.firstTask model.store
-                                |> Maybe.unwrap model.selection (flip TaskSelected 0)
-                                |> flip setSelection model
+                    Model.Down ->
+                        case model.selection of
+                            Model.TaskSelected id _ ->
+                                Store.nextTask id model.store
+                                    |> Maybe.unwrap model.selection (flip TaskSelected 0)
+                                    |> flip setSelection model
 
-                Model.Up ->
-                    case model.selection of
-                        Model.TaskSelected id _ ->
-                            Store.prevTask id model.store
-                                |> Maybe.unwrap InputSelected (flip TaskSelected 0)
-                                |> flip setSelection model
+                            Model.NoSelection ->
+                                Store.firstTask model.store
+                                    |> Maybe.unwrap NoSelection (flip TaskSelected 0)
+                                    |> flip setSelection model
 
-                        Model.NoSelection ->
-                            Store.lastTask model.store
-                                |> Maybe.unwrap NoSelection (flip TaskSelected 0)
-                                |> flip setSelection model
+                            Model.InputSelected ->
+                                Store.firstTask model.store
+                                    |> Maybe.unwrap model.selection (flip TaskSelected 0)
+                                    |> flip setSelection model
 
-                        Model.InputSelected ->
-                            ( model, Cmd.none )
+                    Model.Up ->
+                        case model.selection of
+                            Model.TaskSelected id _ ->
+                                Store.prevTask id model.store
+                                    |> Maybe.unwrap InputSelected (flip TaskSelected 0)
+                                    |> flip setSelection model
 
-                Model.Escape ->
-                    setSelection NoSelection model
+                            Model.NoSelection ->
+                                Store.lastTask model.store
+                                    |> Maybe.unwrap NoSelection (flip TaskSelected 0)
+                                    |> flip setSelection model
 
-                Model.SelectInput ->
-                    setSelection InputSelected model
+                            Model.InputSelected ->
+                                ( model, Cmd.none )
+
+                    Model.Escape ->
+                        setSelection NoSelection model
+
+                    Model.SelectInput ->
+                        setSelection InputSelected model
 
 
 type alias Update =
@@ -478,6 +496,9 @@ handleMsg msg =
 
         KeyDown key ->
             handleKeyDown key
+
+        Help m ->
+            \model -> ( { model | help = Tasks.Views.Help.update m model.help }, Cmd.none )
 
         NoOp ->
             Cmd.withNoCmd
@@ -546,7 +567,8 @@ updateFiltersAfterUpdate =
 -}
 saveChangedTasks : Update -> Update
 saveChangedTasks =
-    executeIfChanged (\m -> ( m.store.tasks, m.projects )) (onlyCmd Interop.save)
+    executeIfChanged (\m -> ( m.store.tasks, m.projects, m.help.showOnStartup ))
+        (onlyCmd Interop.save)
         |> disableIf Model.isLoadModel
 
 

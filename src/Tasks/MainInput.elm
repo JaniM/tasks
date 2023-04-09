@@ -66,6 +66,7 @@ type Event
     | SetProject String
     | Edited TaskId String (List String)
     | Error String
+    | OpenHelp
     | FocusMe
 
 
@@ -121,6 +122,9 @@ handleMainInput state =
 
         Ok (Tasks.Input.Search rules) ->
             ( state, SetSearch rules )
+
+        Ok Tasks.Input.Help ->
+            ( defaultState, OpenHelp )
 
         Err _ ->
             ( state, None )
@@ -188,6 +192,9 @@ tabfill global state =
                     )
                     state
 
+            else if String.startsWith text Tasks.Input.helpPrefix then
+                ( { state | text = "" }, OpenHelp )
+
             else
                 tabfillTag global state tags [ text ]
 
@@ -207,6 +214,9 @@ tabfill global state =
                 state
                 rule.tags
                 (searchPrefix :: rule.snippets)
+
+        Ok Tasks.Input.Help ->
+            setTextDefault global searchPrefix state
 
         Err _ ->
             ( state, None )
