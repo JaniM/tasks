@@ -12,6 +12,7 @@ module Tasks.Model exposing
     , emptyModel
     , exitEdit
     , isLoadModel
+    , previousView
     , project
     , selectedTask
     , showDoneTasks
@@ -28,8 +29,8 @@ import Tasks.Store as Store exposing (Store)
 import Tasks.Style exposing (Style)
 import Tasks.Task exposing (SearchRule, Task, TaskId)
 import Tasks.Utils exposing (epoch)
-import Time
 import Tasks.Views.Help
+import Time
 
 
 type alias Tag =
@@ -248,3 +249,13 @@ sortRuleByState v a b =
                             compare
                                 (Time.posixToMillis b.createdAt)
                                 (Time.posixToMillis a.createdAt)
+
+
+previousView : ViewState -> ViewState
+previousView v =
+    case v of
+        Edit { prev } ->
+            prev
+
+        _ ->
+            v

@@ -374,7 +374,13 @@ handleKeyDown key model =
     else
         case model.viewState of
             Edit _ ->
-                ( model, focusInput )
+                case key of
+                    Model.Escape ->
+                        { model | viewState = model.viewState |> Model.previousView }
+                            |> handleMainInput Tasks.MainInput.StopEditing
+
+                    _ ->
+                        ( model, focusInput )
 
             ListTasks _ ->
                 case key of

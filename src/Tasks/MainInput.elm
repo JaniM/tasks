@@ -56,6 +56,7 @@ type Msg
     | SubmitInput
     | Tabfill
     | StartEditing Task
+    | StopEditing
     | Focus
 
 
@@ -299,6 +300,9 @@ updateDefault global msg state =
         StartEditing task ->
             editTask task
                 |> withNoEvent
+        
+        StopEditing ->
+            ( Default state, None )
 
         Focus ->
             ( Default state, FocusMe )
@@ -323,6 +327,9 @@ updateEdit global msg state =
             ( Edit state
             , Error "Reached unreachable case: MainInput.updateEdit"
             )
+        
+        StopEditing ->
+            ( Default defaultState, None )
 
         Focus ->
             ( Edit state, FocusMe )

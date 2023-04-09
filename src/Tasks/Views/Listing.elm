@@ -122,21 +122,15 @@ disableKeys =
 taskDropdown : Style -> Task -> Element Msg
 taskDropdown style task =
     let
-        button : { label : Element msg, onPress : Maybe msg, attrs : List (Attribute msg) } -> Int -> Element msg
+        button : { label : Element msg, onPress : Maybe msg } -> Int -> Element msg
         button config n =
-            let
-                attrs : List (Attribute msg)
-                attrs =
-                    config.attrs
-                        ++ [ padding (paddingScale 1)
-                           , Element.Background.color style.buttonBackground
-                           , Element.Font.size (style.textSize -1)
-                           , Html.Attributes.id (task.id ++ "-" ++ String.fromInt n)
-                                |> htmlAttribute
-                           ]
-            in
             Element.Input.button
-                attrs
+                [ padding (paddingScale 1)
+                , Element.Background.color style.buttonBackground
+                , Element.Font.size (style.textSize -1)
+                , Html.Attributes.id (task.id ++ "-" ++ String.fromInt n)
+                    |> htmlAttribute
+                ]
                 { onPress = config.onPress, label = config.label }
 
         remove : Int -> Element Msg
@@ -144,7 +138,6 @@ taskDropdown style task =
             button
                 { onPress = Just (RemoveTask task.id)
                 , label = text "Remove"
-                , attrs = []
                 }
 
         done : Int -> Element Msg
@@ -153,22 +146,19 @@ taskDropdown style task =
                 button
                     { onPress = Just (MarkDone task.id)
                     , label = text "Unmark Done"
-                    , attrs = []
                     }
 
             else
                 button
                     { onPress = Just (MarkDone task.id)
                     , label = text "Done"
-                    , attrs = []
                     }
 
         edit : Int -> Element Msg
         edit =
             button
-                { onPress = Nothing
+                { onPress = Just (StartEditing task)
                 , label = text "Edit"
-                , attrs = [ onClickNoPropagate (StartEditing task) ]
                 }
 
         pick : () -> Maybe (Int -> Element Msg)
@@ -178,7 +168,6 @@ taskDropdown style task =
                     (button
                         { onPress = Just (PickTask task.id True)
                         , label = text "Repick"
-                        , attrs = []
                         }
                     )
 
@@ -190,7 +179,6 @@ taskDropdown style task =
                     (button
                         { onPress = Just (PickTask task.id True)
                         , label = text "Pick"
-                        , attrs = []
                         }
                     )
 
@@ -201,7 +189,6 @@ taskDropdown style task =
                     button
                         { onPress = Just (PickTask task.id False)
                         , label = text "Unpick"
-                        , attrs = []
                         }
                 )
 
