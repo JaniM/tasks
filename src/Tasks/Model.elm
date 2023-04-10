@@ -27,7 +27,7 @@ import Random.Pcg.Extended as Pcg
 import Tasks.MainInput
 import Tasks.Store as Store exposing (Store)
 import Tasks.Style exposing (Style)
-import Tasks.Task exposing (SearchRule, Task, TaskId)
+import Tasks.Task exposing (Priority(..), SearchRule, Task, TaskId)
 import Tasks.Utils exposing (comparePosix, epoch)
 import Tasks.Views.Help
 import Time
@@ -90,7 +90,7 @@ type ListKind
 
 type Msg
     = MainInput Tasks.MainInput.Msg
-    | AddTask String (List Tag) Time.Posix
+    | AddTask String (List Tag) Priority Time.Posix
     | RemoveTask TaskId
     | UpdateTask TaskId (Task -> Task)
       -- TODO: Maybe this should be generalized to something like SendCmd?
@@ -253,7 +253,49 @@ sortRuleByState v a b =
                             comparePosix ap bp
 
                         _ ->
-                            comparePosix b.createdAt a.createdAt
+                            cmpPriority b.priority a.priority
+                                |> cmpSeq (comparePosix b.createdAt a.createdAt)
+
+
+cmpSeq : Order -> Order -> Order
+cmpSeq b a =
+    case a of
+        EQ ->
+            b
+
+        _ ->
+            a
+
+
+cmpPriority : Priority -> Priority -> Order
+cmpPriority a b =
+    case ( a, b ) of
+        ( Low, High ) ->
+            LT
+
+        ( Low, Medium ) ->
+            LT
+
+        ( Low, Low ) ->
+            EQ
+
+        ( Medium, High ) ->
+            LT
+
+        ( Medium, Medium ) ->
+            EQ
+
+        ( Medium, Low ) ->
+            GT
+
+        ( High, Low ) ->
+            GT
+
+        ( High, Medium ) ->
+            GT
+
+        ( High, High ) ->
+            EQ
 
 
 previousView : ViewState -> ViewState

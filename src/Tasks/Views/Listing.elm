@@ -32,7 +32,7 @@ import Json.Decode as D
 import Maybe.Extra as Maybe
 import Tasks.Model exposing (ListKind(..), ListState, Msg(..), Selection(..))
 import Tasks.Style exposing (Style, paddingScale)
-import Tasks.Task exposing (Task)
+import Tasks.Task exposing (Priority(..), Task)
 import Tasks.Utils exposing (epoch, groupByKey)
 import Time
 import Time.Format
@@ -233,7 +233,15 @@ viewTask style selected task =
                 style.buttonBackground
 
             else
-                style.taskBackground
+                case task.priority of
+                    Low ->
+                        style.lowPrioBackground
+
+                    Medium ->
+                        style.taskBackground
+
+                    High ->
+                        style.highPrioBackground
 
         tags : Element Msg
         tags =

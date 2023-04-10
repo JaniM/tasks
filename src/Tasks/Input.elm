@@ -1,18 +1,19 @@
 module Tasks.Input exposing
     ( InputDesc(..)
+    , helpPrefix
     , parseInput
     , projectPrefix
-    , searchPrefix, helpPrefix
+    , searchPrefix
     )
 
 import Parser as P exposing ((|.), (|=), DeadEnd, Parser)
 import Set
-import Tasks.Task exposing (SearchRule)
+import Tasks.Task exposing (Priority(..), SearchRule)
 import Tasks.Utils exposing (choose)
 
 
 type InputDesc
-    = Text String (List String)
+    = Text String (List String) Priority
     | Project String
     | Search SearchRule
     | Help
@@ -21,6 +22,7 @@ type InputDesc
 type TextPart
     = TextPart String
     | TagPart String
+    | PriorityPart Priority
 
 
 projectPrefix : String
@@ -49,9 +51,9 @@ parseInput =
                 |. P.token helpPrefix
             , P.succeed partsToSearch
                 |. P.token searchPrefix
-                |= multipleParts
+                |= multipleParts searchParts
             , P.succeed partsToText
-                |= multipleParts
+                |= multipleParts textParts
             ]
 
 
@@ -87,54 +89,94 @@ escapedWord =
         |= word
 
 
-multipleParts : Parser (List TextPart)
-multipleParts =
+searchParts : List (Parser TextPart)
+searchParts =
+    [ P.map TagPart tag
+    , P.map TextPart escapedWord
+    , P.map TextPart word
+    ]
+
+
+textParts : List (Parser TextPart)
+textParts =
+    [ P.map TagPart tag
+    , P.map PriorityPart priorityParser
+    , P.map TextPart escapedWord
+    , P.map TextPart word
+    ]
+
+
+priorityParser : Parser Priority
+priorityParser =
+    P.oneOf
+        [ P.succeed Low
+            |. P.token "--"
+        , P.succeed High
+            |. P.token "++"
+        ]
+
+
+multipleParts : List (Parser TextPart) -> Parser (List TextPart)
+multipleParts partParsers =
     let
         step : List TextPart -> Parser (P.Step (List TextPart) (List TextPart))
         step revParts =
             let
-                part : (a -> TextPart) -> Parser a -> Parser (P.Step (List TextPart) b)
-                part kind =
-                    P.map (\p -> P.Loop (kind p :: revParts))
+                part : Parser TextPart -> Parser (P.Step (List TextPart) b)
+                part =
+                    P.map (\p -> P.Loop (p :: revParts))
             in
-            P.oneOf
-                [ part TagPart tag
-                , part TextPart escapedWord
-                , part TextPart word
-                , P.succeed (choose (P.Done revParts) (P.Loop revParts) << String.isEmpty)
-                    |= P.getChompedString P.spaces
-                ]
+            P.oneOf <|
+                List.map part partParsers
+                    ++ [ P.succeed (choose (P.Done revParts) (P.Loop revParts) << String.isEmpty)
+                            |= P.getChompedString P.spaces
+                       ]
     in
     P.loop [] step
 
 
 partsToText : List TextPart -> InputDesc
 partsToText =
-    collectParts >> (\{ snippets, tags } -> Text (String.join " " snippets) tags)
+    collectParts
+        >> (\{ snippets, tags, priority } ->
+                Text (String.join " " snippets) tags priority
+           )
 
 
 partsToSearch : List TextPart -> InputDesc
 partsToSearch =
-    collectParts >> Search
+    collectParts
+        >> (\{ snippets, tags } ->
+                Search { snippets = snippets, tags = tags }
+           )
 
 
-{-| SearchRule happens to have the right shape - this doesn't need to last
--}
-collectParts : List TextPart -> SearchRule
+type alias CollectedParts =
+    { snippets : List String
+    , tags : List String
+    , priority : Priority
+    }
+
+
+collectParts : List TextPart -> CollectedParts
 collectParts =
     let
-        loop : List String -> List String -> List TextPart -> SearchRule
-        loop text tags parts =
+        loop : List String -> List String -> Priority -> List TextPart -> CollectedParts
+        loop text tags prio parts =
             case parts of
                 (TextPart t) :: nparts ->
-                    loop (t :: text) tags nparts
+                    loop (t :: text) tags prio nparts
 
                 (TagPart t) :: nparts ->
-                    loop text (t :: tags) nparts
+                    loop text (t :: tags) prio nparts
+
+                (PriorityPart p) :: nparts ->
+                    loop text tags p nparts
 
                 [] ->
                     { snippets = text
                     , tags = tags
+                    , priority = prio
                     }
     in
-    loop [] []
+    loop [] [] Medium

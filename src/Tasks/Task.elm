@@ -1,5 +1,6 @@
 module Tasks.Task exposing
-    ( SearchRule
+    ( Priority(..)
+    , SearchRule
     , Task
     , TaskId
     , emptySwarch
@@ -21,23 +22,19 @@ type alias SearchRule =
     }
 
 
+type Priority
+    = Low
+    | Medium
+    | High
+
+
 type alias Task =
-    { -- Text of the task
-      text : String
-
-    -- Tags of the task
+    { text : String
     , tags : List String
-
-    -- When the task was created
+    , priority : Priority
     , createdAt : Time.Posix
-
-    -- When the task was done
     , doneAt : Maybe Time.Posix
-
-    -- When the task was picked to be done
     , pickedAt : Maybe Time.Posix
-
-    -- Id of the task
     , id : TaskId
     }
 
@@ -58,6 +55,7 @@ emptyTask : Task
 emptyTask =
     { text = ""
     , tags = []
+    , priority = Medium
     , createdAt = epoch
     , doneAt = Nothing
     , pickedAt = Nothing

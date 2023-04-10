@@ -136,6 +136,10 @@ creatingTasks style =
         , indent <| note "tags can be added to tasks later by editing them"
         , code "task1 \\#tag"
         , indent <| note "use a backslash to escape a tag"
+        , code "task1 ++"
+        , indent <| note "Prioritize the task"
+        , code "task1 --"
+        , indent <| note "Deprioritize the task"
         ]
 
 

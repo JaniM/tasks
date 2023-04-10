@@ -10,6 +10,8 @@ type alias Style =
     , taskBackground : Color
     , doneBackground : Color
     , lateBackground : Color
+    , highPrioBackground : Color
+    , lowPrioBackground : Color
     , buttonBackground : Color
     , textColor : Color
     , textSize : Int -> Int
@@ -24,6 +26,8 @@ lightStyle =
     , taskBackground = rgb255 200 200 200
     , doneBackground = rgb255 150 200 150
     , lateBackground = rgb255 200 100 100
+    , highPrioBackground = rgb255 200 200 250
+    , lowPrioBackground = rgb255 200 200 150
     , buttonBackground = rgb255 180 180 180
     , textColor = rgb255 0 0 0
     , textSize = intModular 16 1.2
@@ -38,6 +42,8 @@ darkStyle =
     , taskBackground = rgb255 75 75 75
     , doneBackground = rgb255 75 100 75
     , lateBackground = rgb255 100 75 75
+    , highPrioBackground = rgb255 75 75 100
+    , lowPrioBackground = rgb255 75 75 50
     , buttonBackground = rgb255 100 100 100
     , textColor = rgb255 255 255 255
     , textSize = intModular 16 1.2

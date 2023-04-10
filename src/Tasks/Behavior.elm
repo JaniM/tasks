@@ -134,9 +134,9 @@ handleMainInput msg model =
         Tasks.MainInput.None ->
             ( newModel, Cmd.none )
 
-        Tasks.MainInput.AddTask text tags ->
+        Tasks.MainInput.AddTask text tags prio ->
             newModel
-                |> Cmd.withCmd (withTime (AddTask text (addProjectToTags tags |> List.unique)))
+                |> Cmd.withCmd (withTime (AddTask text (addProjectToTags tags |> List.unique) prio))
 
         Tasks.MainInput.SetSearch rule ->
             { newModel | search = Just rule }
@@ -485,8 +485,8 @@ handleMsg msg =
         StartEditing task ->
             startEditing task
 
-        AddTask text tags time ->
-            Cmd.withNoCmd << addTaskToModel (Task text tags time Nothing Nothing)
+        AddTask text tags prio time ->
+            Cmd.withNoCmd << addTaskToModel (Task text tags prio time Nothing Nothing)
 
         MarkDone taskId ->
             onlyCmd <| always <| markDone taskId

@@ -19,7 +19,7 @@ import List.Extra as List
 import Maybe.Extra as Maybe
 import Tasks.Input exposing (parseInput, projectPrefix, searchPrefix)
 import Tasks.Style exposing (Style, paddingScale)
-import Tasks.Task exposing (SearchRule, Task, TaskId)
+import Tasks.Task exposing (Priority, SearchRule, Task, TaskId)
 import Tasks.Utils exposing (decodeKeys, findCommonPrefix, findMatchingPrefix, listOfOne)
 import Tuple exposing (mapFirst)
 
@@ -62,7 +62,7 @@ type Msg
 
 type Event
     = None
-    | AddTask String (List String)
+    | AddTask String (List String) Priority
     | SetSearch SearchRule
     | SetProject String
     | Edited TaskId String (List String)
@@ -115,12 +115,12 @@ projectSearch model =
 handleMainInput : DefaultState -> ( DefaultState, Event )
 handleMainInput state =
     case parseInput state.text of
-        Ok (Tasks.Input.Text text tags) ->
+        Ok (Tasks.Input.Text text tags prio) ->
             if String.isEmpty text then
                 ( state, None )
 
             else
-                ( defaultState, AddTask text tags )
+                ( defaultState, AddTask text tags prio )
 
         Ok (Tasks.Input.Project project) ->
             ( defaultState, SetProject project )
@@ -138,7 +138,7 @@ handleMainInput state =
 handleMainInputEdit : EditState -> ( Model, Event )
 handleMainInputEdit state =
     case parseInput state.text of
-        Ok (Tasks.Input.Text text tags) ->
+        Ok (Tasks.Input.Text text tags _) ->
             ( Default defaultState, Edited state.taskId text tags )
 
         _ ->
@@ -178,12 +178,25 @@ tabfillTag global state tags textBeforeTags =
     setTextDefault global newText state
 
 
+priorityToText : Priority -> String
+priorityToText prio =
+    case prio of
+        Tasks.Task.Low ->
+            "--"
+
+        Tasks.Task.Medium ->
+            ""
+
+        Tasks.Task.High ->
+            "++"
+
+
 {-| Perform tab completion for the main input field.
 -}
 tabfill : Global -> CommonState s -> ( CommonState s, Event )
 tabfill global state =
     case parseInput state.text of
-        Ok (Tasks.Input.Text text tags) ->
+        Ok (Tasks.Input.Text text tags prio) ->
             if String.startsWith text projectPrefix then
                 setTextDefault global projectPrefix state
 
@@ -201,7 +214,7 @@ tabfill global state =
                 ( { state | text = "" }, OpenHelp )
 
             else
-                tabfillTag global state tags [ text ]
+                tabfillTag global state tags [ text, priorityToText prio ]
 
         Ok (Tasks.Input.Project text) ->
             let
@@ -243,7 +256,7 @@ setTextDefault global s state =
             }
                 |> withEvent (SetSearch rule)
 
-        Ok (Tasks.Input.Text _ tags) ->
+        Ok (Tasks.Input.Text _ tags _) ->
             { state
                 | text = s
                 , tagSuggestions = tagsMatchingLast global tags
@@ -261,7 +274,7 @@ setTextDefault global s state =
 setTextEdit : Global -> String -> EditState -> ( EditState, Event )
 setTextEdit global s state =
     case parseInput s of
-        Ok (Tasks.Input.Text _ tags) ->
+        Ok (Tasks.Input.Text _ tags _) ->
             { state
                 | text = s
                 , tagSuggestions = tagsMatchingLast global tags
@@ -300,7 +313,7 @@ updateDefault global msg state =
         StartEditing task ->
             editTask task
                 |> withNoEvent
-        
+
         StopEditing ->
             ( Default state, None )
 
@@ -327,7 +340,7 @@ updateEdit global msg state =
             ( Edit state
             , Error "Reached unreachable case: MainInput.updateEdit"
             )
-        
+
         StopEditing ->
             ( Default defaultState, None )
 
