@@ -146,10 +146,10 @@ handleMainInput msg model =
             switchProject project newModel
                 |> Cmd.withNoCmd
 
-        Tasks.MainInput.Edited taskId text tags ->
+        Tasks.MainInput.Edited taskId text tags prio ->
             newModel
                 |> Model.exitEdit
-                |> Model.updateTask (\t -> { t | text = text, tags = tags }) taskId
+                |> Model.updateTask (\t -> { t | text = text, tags = tags, priority = prio }) taskId
                 |> Cmd.withNoCmd
 
         Tasks.MainInput.Error err ->

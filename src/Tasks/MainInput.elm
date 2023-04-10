@@ -65,7 +65,7 @@ type Event
     | AddTask String (List String) Priority
     | SetSearch SearchRule
     | SetProject String
-    | Edited TaskId String (List String)
+    | Edited TaskId String (List String) Priority
     | Error String
     | OpenHelp
     | FocusMe
@@ -138,8 +138,8 @@ handleMainInput state =
 handleMainInputEdit : EditState -> ( Model, Event )
 handleMainInputEdit state =
     case parseInput state.text of
-        Ok (Tasks.Input.Text text tags _) ->
-            ( Default defaultState, Edited state.taskId text tags )
+        Ok (Tasks.Input.Text text tags prio) ->
+            ( Default defaultState, Edited state.taskId text tags prio )
 
         _ ->
             ( Edit state, None )
@@ -289,7 +289,7 @@ setTextEdit global s state =
 editTask : Task -> Model
 editTask task =
     Edit
-        { text = String.join " " (task.text :: task.tags)
+        { text = String.join " " (task.text :: task.tags ++ [ priorityToText task.priority ])
         , tagSuggestions = Nothing
         , taskId = task.id
         }
