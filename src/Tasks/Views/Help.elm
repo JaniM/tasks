@@ -134,6 +134,8 @@ creatingTasks style =
         , indent <| note "create a new task and assign it tags"
         , indent <| note "projects are just tags"
         , indent <| note "tags can be added to tasks later by editing them"
+        , code "task1 \\#tag"
+        , indent <| note "use a backslash to escape a tag"
         ]
 
 
@@ -141,18 +143,19 @@ hotkeys : Style -> Element Msg
 hotkeys style =
     column [ width fill, Element.Font.size (style.textSize 1) ]
         [ text "Hotkeys"
+        , el [ height (px 10) ] none
         , row [ alignTop, width fill ]
             [ Element.textColumn
-                [ width fill
-                ]
+                [ width fill, height fill, alignTop ]
                 [ code "Up/Down"
                 , indent <| note "Navigate between tasks"
                 , code "Left/Right"
                 , indent <| note "Select action on a task"
+                , code "E"
+                , indent <| note "Select the input field"
                 ]
             , Element.textColumn
-                [ width fill
-                ]
+                [ width fill, height fill, alignTop ]
                 [ code "Enter"
                 , indent <| note "Activate a button"
                 , code "Ctrl + D"

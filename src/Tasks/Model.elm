@@ -28,7 +28,7 @@ import Tasks.MainInput
 import Tasks.Store as Store exposing (Store)
 import Tasks.Style exposing (Style)
 import Tasks.Task exposing (SearchRule, Task, TaskId)
-import Tasks.Utils exposing (epoch)
+import Tasks.Utils exposing (comparePosix, epoch)
 import Tasks.Views.Help
 import Time
 
@@ -224,6 +224,10 @@ exitEdit model =
     { model | viewState = viewState }
 
 
+{-| Sort rules for the list of tasks.
+Done tasks: sort by completion date, descending
+Undone tasks: sort by picked date, ascending, then by creation date, descending
+-}
 sortRuleByState : ViewState -> Task -> Task -> Order
 sortRuleByState v a b =
     case v of
@@ -245,10 +249,11 @@ sortRuleByState v a b =
                         ( Nothing, Just _ ) ->
                             GT
 
+                        ( Just ap, Just bp ) ->
+                            comparePosix ap bp
+
                         _ ->
-                            compare
-                                (Time.posixToMillis b.createdAt)
-                                (Time.posixToMillis a.createdAt)
+                            comparePosix b.createdAt a.createdAt
 
 
 previousView : ViewState -> ViewState

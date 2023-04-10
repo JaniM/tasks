@@ -7,7 +7,7 @@ module Tasks.Utils exposing
     , flip
     , groupByKey
     , intModular
-    , listOfOne, decodeControlKeys
+    , listOfOne, decodeControlKeys, comparePosix
     )
 
 import Element
@@ -114,3 +114,7 @@ decodeControlKeys pairs =
 flip : (a -> b -> c) -> b -> a -> c
 flip f x y =
     f y x
+
+comparePosix : Time.Posix -> Time.Posix -> Order
+comparePosix a b =
+    compare (Time.posixToMillis a) (Time.posixToMillis b)
